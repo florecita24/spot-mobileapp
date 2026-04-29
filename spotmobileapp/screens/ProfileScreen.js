@@ -145,20 +145,6 @@ export default function ProfileScreen({ navigation }) {
         <SafeAreaView style={{ flex: 0 }} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profil Akun</Text>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity 
-              style={styles.iconBtn}
-              onPress={() => navigation.navigate('Notification')}
-            >
-              <BellIcon color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.iconBtn}
-              onPress={() => navigation.navigate('AddDevice')}
-            >
-              <PlusIcon color="#FFF" />
-            </TouchableOpacity>
-          </View>
         </View>
         <View style={styles.headerCurve} />
       </View>
@@ -182,7 +168,6 @@ export default function ProfileScreen({ navigation }) {
                 onPress={() => navigation.navigate('EditProfile')}
               >
                 <Text style={styles.editBtnText}>Edit Profil</Text>
-                <ArrowRightCircleIcon color="#FFF" />
               </TouchableOpacity>
             </View>
           </View>
@@ -255,7 +240,7 @@ const styles = StyleSheet.create({
   headerBackground: {
     backgroundColor: primaryColor,
     paddingTop: Platform.OS === 'android' ? 16 : 10,
-    paddingBottom: 4, // Extremely minimal space below text
+    paddingBottom: 8, // Reduced space below text
     zIndex: 1,
   },
   headerCurve: {
@@ -271,14 +256,15 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFF',
+    marginTop: 8, // Moved text down slightly
   },
   headerIcons: {
     flexDirection: 'row',
@@ -327,7 +313,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileName: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
     color: '#1F2937',
     marginBottom: 10,
@@ -336,15 +322,15 @@ const styles = StyleSheet.create({
     backgroundColor: primaryColor,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     gap: 6,
     alignSelf: 'flex-start',
   },
   editBtnText: {
     color: '#FFF',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
   },
   menuContainer: {

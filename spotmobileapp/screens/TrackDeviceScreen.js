@@ -112,13 +112,21 @@ const GoogleMapsUserDot = ({ size = 24 }) => (
   </Svg>
 );
 
-export default function TrackDeviceScreen({ navigation }) {
+export default function TrackDeviceScreen({ route, navigation }) {
   const devices = [
     { id: '1', name: 'SPOT-1', status: 'Connected', isConnected: true, lat: -6.8906, lng: 107.6105 },
     { id: '2', name: 'SPOT-2', status: 'Disconnected', isConnected: false, lat: -6.8920, lng: 107.6120 },
   ];
 
-  const initialRegion = {
+  const focusDeviceName = route?.params?.focusDevice?.name;
+  const targetDevice = focusDeviceName ? devices.find(d => d.name === focusDeviceName) : null;
+
+  const initialRegion = targetDevice ? {
+    latitude: targetDevice.lat - 0.0004, // Offset slightly so it's not hidden behind the bottom sheet
+    longitude: targetDevice.lng,
+    latitudeDelta: 0.001,
+    longitudeDelta: 0.001,
+  } : {
     latitude: -6.8910,
     longitude: 107.6110,
     latitudeDelta: 0.01,
@@ -301,20 +309,6 @@ export default function TrackDeviceScreen({ navigation }) {
         <SafeAreaView style={{ flex: 0 }} />
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Lacak Perangkat</Text>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity 
-              style={styles.iconBtn}
-              onPress={() => navigation.navigate('Notification')}
-            >
-              <BellIcon color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.iconBtn}
-              onPress={() => navigation.navigate('AddDevice')}
-            >
-              <PlusIcon color="#FFF" />
-            </TouchableOpacity>
-          </View>
         </View>
       </View>
 
@@ -357,7 +351,6 @@ export default function TrackDeviceScreen({ navigation }) {
               {/* Action Button */}
               <View style={[styles.actionBtn, device.isConnected ? styles.actionBtnActive : styles.actionBtnInactive]}>
                 <Text style={device.isConnected ? styles.actionBtnTextActive : styles.actionBtnTextInactive}>Lacak</Text>
-                <ArrowRightIcon color={device.isConnected ? '#FFF' : '#9CA3AF'} size={14} />
               </View>
             </TouchableOpacity>
           ))}
@@ -418,14 +411,14 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 16 : 16,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '800',
     color: '#FFF',
   },
