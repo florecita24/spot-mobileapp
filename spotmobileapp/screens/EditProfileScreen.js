@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
@@ -58,11 +59,23 @@ export default function EditProfileScreen({ navigation }) {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileName, setProfileName] = useState('Favian Rafi L');
 
   // States for modern input focus effects
   const [isOldFocused, setIsOldFocused] = useState(false);
   const [isNewFocused, setIsNewFocused] = useState(false);
   const [isConfirmFocused, setIsConfirmFocused] = useState(false);
+
+  // Rename Modal Logic
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameInput, setRenameInput] = useState(profileName);
+
+  const handleRenameProfile = () => {
+    if (renameInput.trim()) {
+      setProfileName(renameInput.trim());
+      setRenameModalVisible(false);
+    }
+  };
 
   const handleSave = () => {
     // Save logic here
@@ -104,8 +117,11 @@ export default function EditProfileScreen({ navigation }) {
             </View>
             
             <View style={styles.nameRow}>
-              <Text style={styles.profileName}>Favian Rafi L</Text>
-              <TouchableOpacity style={styles.editNameBtn}>
+              <Text style={styles.profileName}>{profileName}</Text>
+              <TouchableOpacity style={styles.editNameBtn} onPress={() => {
+                setRenameInput(profileName);
+                setRenameModalVisible(true);
+              }}>
                 <PencilIcon color={primaryColor} size={16} />
               </TouchableOpacity>
             </View>
@@ -182,6 +198,35 @@ export default function EditProfileScreen({ navigation }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Rename Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={renameModalVisible}
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Ubah Nama Profil</Text>
+            
+            <TextInput
+              style={styles.renameInput}
+              placeholder="Masukkan nama profil..."
+              placeholderTextColor="#9CA3AF"
+              value={renameInput}
+              onChangeText={setRenameInput}
+            />
+            
+            <TouchableOpacity 
+              style={styles.modalBtn}
+              onPress={handleRenameProfile}
+            >
+              <Text style={styles.modalBtnText}>Simpan</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -341,5 +386,78 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 16,
     fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 71, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 28,
+  },
+  renameInput: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: primaryColor,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: '#1F2937',
+    backgroundColor: '#FFF',
+    marginVertical: 16,
+    fontWeight: '500',
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalBtn: {
+    flex: 1,
+    backgroundColor: primaryColor,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalBtnOutline: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  modalBtnOutlineText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

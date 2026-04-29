@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Animated,
   Modal,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
@@ -104,6 +105,18 @@ export default function DeviceDetailScreen({ navigation, route }) {
 
   const [isLocked, setIsLocked] = useState(device.isLocked);
   const [isConnected, setIsConnected] = useState(device.isConnected);
+  const [deviceName, setDeviceName] = useState(device.name);
+
+  // Rename Modal Logic
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameInput, setRenameInput] = useState(device.name);
+
+  const handleRenameDevice = () => {
+    if (renameInput.trim()) {
+      setDeviceName(renameInput.trim());
+      setRenameModalVisible(false);
+    }
+  };
 
   // Connection Modal Logic
   const [modalVisible, setModalVisible] = useState(false);
@@ -196,8 +209,11 @@ export default function DeviceDetailScreen({ navigation, route }) {
             {/* Info */}
             <View style={styles.deviceInfo}>
               <View style={styles.nameRow}>
-                <Text style={styles.deviceName}>{device.name}</Text>
-                <TouchableOpacity style={styles.editBtn}>
+                <Text style={styles.deviceName}>{deviceName}</Text>
+                <TouchableOpacity style={styles.editBtn} onPress={() => {
+                  setRenameInput(deviceName);
+                  setRenameModalVisible(true);
+                }}>
                   <EditIcon color={primaryColor} />
                 </TouchableOpacity>
               </View>
@@ -247,20 +263,21 @@ export default function DeviceDetailScreen({ navigation, route }) {
             <View style={styles.customToggleContainer}>
               <TouchableOpacity 
                 activeOpacity={1} 
-                onPress={toggleMode} 
-                style={styles.customToggleTrack}
+                onPress={toggleMode}
+                disabled={!isConnected}
+                style={[styles.customToggleTrack, !isConnected && styles.customToggleTrackDisabled]}
                 onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
               >
-                <Animated.View style={[styles.customToggleThumb, { transform: [{ translateX: thumbTranslateX }] }]} />
+                <Animated.View style={[styles.customToggleThumb, !isConnected && styles.customToggleThumbDisabled, { transform: [{ translateX: thumbTranslateX }] }]} />
                 
                 <View style={styles.customToggleLabelContainer}>
                   <View style={styles.customToggleLabel}>
-                    <LockIcon isLocked={false} color={!isLocked ? primaryColor : '#9CA3AF'} size={16} />
-                    <Text style={[styles.customToggleText, !isLocked && styles.customToggleTextActive]}>Unlocked</Text>
+                    <LockIcon isLocked={false} color={!isConnected ? '#D1D5DB' : (!isLocked ? primaryColor : '#9CA3AF')} size={16} />
+                    <Text style={[styles.customToggleText, !isConnected && styles.customToggleTextDisabled, !isLocked && !isConnected === false && styles.customToggleTextActive]}>Unlocked</Text>
                   </View>
                   <View style={styles.customToggleLabel}>
-                    <LockIcon isLocked={true} color={isLocked ? primaryColor : '#9CA3AF'} size={16} />
-                    <Text style={[styles.customToggleText, isLocked && styles.customToggleTextActive]}>Locked</Text>
+                    <LockIcon isLocked={true} color={!isConnected ? '#D1D5DB' : (isLocked ? primaryColor : '#9CA3AF')} size={16} />
+                    <Text style={[styles.customToggleText, !isConnected && styles.customToggleTextDisabled, isLocked && !isConnected === false && styles.customToggleTextActive]}>Locked</Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -294,7 +311,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
               <View key={index} style={styles.logItem}>
                 <View style={[styles.logTimelineDot, log.type === 'danger' && styles.logTimelineDotDanger]} />
                 <View style={styles.logContent}>
-                  <Text style={styles.logTime}>[{log.time}]</Text>
+                  <Text style={[styles.logTime, log.type === 'danger' && styles.logTimeDanger]}>[{log.time}]</Text>
                   <Text style={[styles.logText, log.type === 'danger' && styles.logTextDanger]}>
                     {log.text}
                   </Text>
@@ -317,37 +334,37 @@ export default function DeviceDetailScreen({ navigation, route }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            
             {connectionStatus === 'connecting' && (
               <View style={styles.modalStateContainer}>
-                <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                  <Svg width={100} height={100} viewBox="0 0 100 100" fill="none">
-                    {/* Outer Wave */}
-                    <Path d="M20 40 C30 15 70 15 80 40" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
-                    {/* Middle Wave */}
-                    <Path d="M32 50 C40 30 60 30 68 50" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
-                    {/* Inner Wave */}
-                    <Path d="M43 60 C47 50 53 50 57 60" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
-                    {/* Phone Body */}
-                    <Rect x="35" y="45" width="30" height="45" rx="8" fill={primaryColor} />
-                    <Line x1="45" y1="80" x2="55" y2="80" stroke="#FFF" strokeWidth={3} strokeLinecap="round" />
-                  </Svg>
+                <View style={styles.modalIconWrap}>
+                  <View style={styles.modalIconBg}>
+                    <Svg width={68} height={68} viewBox="0 0 100 100" fill="none">
+                      <Path d="M20 40 C30 15 70 15 80 40" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
+                      <Path d="M32 50 C40 30 60 30 68 50" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
+                      <Path d="M43 60 C47 50 53 50 57 60" stroke={primaryColor} strokeWidth={6} strokeLinecap="round" />
+                      <Rect x="35" y="45" width="30" height="45" rx="8" fill={primaryColor} />
+                      <Line x1="45" y1="80" x2="55" y2="80" stroke="#FFF" strokeWidth={3} strokeLinecap="round" />
+                    </Svg>
+                  </View>
+                  <View style={styles.modalSpinnerWrap}>
+                    <ActivityIndicator size="small" color={primaryColor} />
+                  </View>
                 </View>
-                <ActivityIndicator size="large" color={primaryColor} style={{ marginBottom: 20 }} />
-                <Text style={styles.modalTitle}>Sedang Menghubungkan{'\n'}ke Perangkat...</Text>
+                <Text style={styles.modalTitle}>Sedang menghubungkan ke perangkat</Text>
                 <Text style={styles.modalSubtitle}>Tunggu sekitar 10-20 detik</Text>
               </View>
             )}
 
             {connectionStatus === 'success' && (
               <View style={styles.modalStateContainer}>
-                <View style={styles.statusSquare}>
+                <View style={[styles.statusSquare, styles.statusSquareSuccess]}>
                   <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
                     <Polyline points="20 6 9 17 4 12" />
                   </Svg>
                 </View>
-                <Text style={styles.modalTitle}>Perangkat <Text style={{color: primaryColor}}>SPOT</Text> Berhasil{'\n'}Terhubung!</Text>
-                <TouchableOpacity style={[styles.modalBtn, { marginTop: 20 }]} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalTitle}>Perangkat <Text style={{ color: primaryColor }}>SPOT</Text> berhasil terhubung</Text>
+                <Text style={styles.modalSubtitle}>Perangkat sekarang siap digunakan.</Text>
+                <TouchableOpacity style={styles.modalBtn} onPress={() => setModalVisible(false)}>
                   <Text style={styles.modalBtnText}>Selesai</Text>
                 </TouchableOpacity>
               </View>
@@ -355,25 +372,49 @@ export default function DeviceDetailScreen({ navigation, route }) {
 
             {connectionStatus === 'failed' && (
               <View style={styles.modalStateContainer}>
-                <View style={[styles.statusSquare, { shadowColor: '#EF4444', backgroundColor: '#EF4444' }]}>
+                <View style={[styles.statusSquare, styles.statusSquareDanger]}>
                   <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#FFF" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round">
                     <Line x1="18" y1="6" x2="6" y2="18" />
                     <Line x1="6" y1="6" x2="18" y2="18" />
                   </Svg>
                 </View>
-                <Text style={styles.modalTitle}>Perangkat <Text style={{color: '#EF4444'}}>SPOT</Text> Gagal{'\n'}Terhubung!</Text>
+                <Text style={styles.modalTitle}>Perangkat <Text style={{ color: '#EF4444' }}>SPOT</Text> gagal terhubung</Text>
                 <Text style={styles.modalSubtitle}>Silahkan coba lagi!</Text>
-                <View style={styles.modalActionRow}>
-                  <TouchableOpacity style={styles.modalBtnOutline} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.modalBtnOutlineText}>Batal</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#EF4444' }]} onPress={handleToggleConnection}>
-                    <Text style={styles.modalBtnText}>Coba Lagi</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#EF4444' }]} onPress={handleToggleConnection}>
+                  <Text style={styles.modalBtnText}>Coba Lagi</Text>
+                </TouchableOpacity>
               </View>
             )}
 
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rename Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={renameModalVisible}
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Rename Perangkat</Text>
+            
+            <TextInput
+              style={styles.renameInput}
+              placeholder="Masukkan nama perangkat..."
+              placeholderTextColor="#9CA3AF"
+              value={renameInput}
+              onChangeText={setRenameInput}
+            />
+            
+            <TouchableOpacity 
+              style={styles.modalBtn}
+              onPress={handleRenameDevice}
+            >
+              <Text style={styles.modalBtnText}>Simpan</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -428,18 +469,76 @@ const styles = StyleSheet.create({
     elevation: 4,
     marginBottom: 24,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 71, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  modalStateContainer: {
+    alignItems: 'center',
+  },
+  modalIconWrap: {
+    width: 112,
+    height: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalIconBg: {
+    width: 112,
+    height: 112,
+    borderRadius: 32,
+    backgroundColor: primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 71, 0.12)',
+  },
+  modalSpinnerWrap: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 71, 0.16)',
+  },
   modalTitle: {
     fontSize: 22,
     fontWeight: '800',
     color: '#1F2937',
+    marginTop: 2,
     marginBottom: 8,
     textAlign: 'center',
+    lineHeight: 28,
   },
   modalSubtitle: {
     fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 22,
   },
   statusSquare: {
@@ -455,6 +554,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 6,
+  },
+  statusSquareSuccess: {
+    backgroundColor: primaryColor,
+  },
+  statusSquareDanger: {
+    backgroundColor: '#EF4444',
+    shadowColor: '#EF4444',
   },
   cardTopRow: {
     flexDirection: 'row',
@@ -652,6 +758,18 @@ const styles = StyleSheet.create({
     color: primaryColor,
     fontWeight: '800',
   },
+  customToggleTrackDisabled: {
+    backgroundColor: '#E5E7EB',
+    opacity: 0.6,
+  },
+  customToggleThumbDisabled: {
+    backgroundColor: '#D1D5DB',
+    shadowOpacity: 0,
+  },
+  customToggleTextDisabled: {
+    color: '#B4B9C1',
+    fontWeight: '500',
+  },
   logSection: {
     marginBottom: 40,
   },
@@ -704,6 +822,9 @@ const styles = StyleSheet.create({
     color: primaryColor,
     fontWeight: '700',
   },
+  logTimeDanger: {
+    color: 'rgba(255, 107, 71, 0.65)',
+  },
   modalBtn: {
     backgroundColor: primaryColor,
     paddingVertical: 14,
@@ -724,15 +845,27 @@ const styles = StyleSheet.create({
   },
   modalBtnOutline: {
     flex: 1,
-    borderWidth: 1.5,
-    borderColor: '#D1D5DB',
+    backgroundColor: '#F3F4F6',
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
   },
   modalBtnOutlineText: {
-    color: '#4B5563',
+    color: '#6B7280',
     fontSize: 15,
     fontWeight: '700',
+  },
+  renameInput: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: primaryColor,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: '#1F2937',
+    backgroundColor: '#FFF',
+    marginVertical: 16,
+    fontWeight: '500',
   },
 });
