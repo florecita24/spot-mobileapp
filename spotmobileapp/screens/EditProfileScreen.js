@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { getSession, getProfile, updateProfile } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const bgColor = '#F4F6F8';
@@ -59,7 +60,12 @@ export default function EditProfileScreen({ navigation }) {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [profileName, setProfileName] = useState('Favian Rafi L');
+  const [profileName, setProfileName] = useState('User');
+  const [userId, setUserId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // States for modern input focus effects
   const [isOldFocused, setIsOldFocused] = useState(false);
@@ -68,12 +74,50 @@ export default function EditProfileScreen({ navigation }) {
 
   // Rename Modal Logic
   const [renameModalVisible, setRenameModalVisible] = useState(false);
-  const [renameInput, setRenameInput] = useState(profileName);
+  const [renameInput, setRenameInput] = useState('');
 
-  const handleRenameProfile = () => {
-    if (renameInput.trim()) {
-      setProfileName(renameInput.trim());
-      setRenameModalVisible(false);
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const { session } = await getSession();
+        if (session?.user?.id) {
+          setUserId(session.user.id);
+          const { profile } = await getProfile(session.user.id);
+          if (profile?.full_name) {
+            setProfileName(profile.full_name);
+            setRenameInput(profile.full_name);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
+  const handleRenameProfile = async () => {
+    if (renameInput.trim() && userId) {
+      setLoading(true);
+      try {
+        const { error } = await updateProfile(userId, { full_name: renameInput.trim() });
+        if (error) {
+          setErrorMessage('Gagal mengubah nama: ' + error.message);
+          setShowErrorModal(true);
+          setTimeout(() => setShowErrorModal(false), 2500);
+        } else {
+          setProfileName(renameInput.trim());
+          setRenameModalVisible(false);
+          setShowSuccessModal(true);
+          setTimeout(() => setShowSuccessModal(false), 2000);
+        }
+      } catch (error) {
+        setErrorMessage('Terjadi kesalahan: ' + error.message);
+        setShowErrorModal(true);
+        setTimeout(() => setShowErrorModal(false), 2500);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -218,12 +262,57 @@ export default function EditProfileScreen({ navigation }) {
               onChangeText={setRenameInput}
             />
             
-            <TouchableOpacity 
-              style={styles.modalBtn}
-              onPress={handleRenameProfile}
-            >
-              <Text style={styles.modalBtnText}>Simpan</Text>
-            </TouchableOpacity>
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity 
+                style={styles.modalBtn}
+                onPress={handleRenameProfile}
+                disabled={loading}
+              >
+                <Text style={styles.modalBtnText}>{loading ? 'Menyimpan...' : 'Simpan'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSuccessModal}
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke={primaryColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Polyline points="20 6 9 17 4 12" />
+              </Svg>
+            </View>
+            <Text style={styles.successTitle}>Perubahan Tersimpan!</Text>
+            <Text style={styles.successMessage}>Nama profil Anda telah berhasil diperbarui.</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showErrorModal}
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <View style={styles.errorIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Circle cx="12" cy="12" r="10" />
+                <Line x1="15" y1="9" x2="9" y2="15" />
+                <Line x1="9" y1="9" x2="15" y2="15" />
+              </Svg>
+            </View>
+            <Text style={styles.errorTitle}>Gagal!</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -399,9 +488,9 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     backgroundColor: '#FFF',
     borderRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 22,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 28,
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 71, 0.15)',
     shadowColor: '#111827',
@@ -423,12 +512,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: primaryColor,
     borderRadius: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     fontSize: 15,
     color: '#1F2937',
     backgroundColor: '#FFF',
-    marginVertical: 16,
+    marginTop: 16,
+    marginBottom: 20,
     fontWeight: '500',
   },
   modalActionRow: {
@@ -436,12 +526,21 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
   },
+  modalButtonContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
   modalBtn: {
-    flex: 1,
+    width: '100%',
     backgroundColor: primaryColor,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
+    shadowColor: primaryColor,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
   },
   modalBtnText: {
     color: '#FFF',
@@ -459,5 +558,93 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 15,
     fontWeight: '700',
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  successIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  errorIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

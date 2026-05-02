@@ -9,9 +9,11 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { signIn } from '../constants/supabase';
 
 // Fallback colors to ensure stability
 const primaryColor = COLORS?.primary || '#FF6B47';
@@ -19,21 +21,33 @@ const backgroundColor = '#F9FAFB';
 const surfaceColor = '#FFFFFF';
 
 export default function LoginScreen({ navigation }) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // States for modern input focus effects
-  const [isUserFocused, setIsUserFocused] = useState(false);
+  const [isEmailFocused, setIsEmailFocused] = useState(false);
   const [isPassFocused, setIsPassFocused] = useState(false);
 
-  const handleLogin = () => {
-    if (!username || !password) {
-      alert('Please fill in all fields');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      alert('Mohon isi semua field');
       return;
     }
-    // Navigate to Dashboard
-    navigation.replace('Dashboard');
+
+    setLoading(true);
+    const { session, error } = await signIn(email, password);
+    setLoading(false);
+
+    if (error) {
+      alert('Login gagal: ' + error.message);
+      return;
+    }
+
+    if (session) {
+      navigation.replace('Dashboard');
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -67,24 +81,25 @@ export default function LoginScreen({ navigation }) {
           {/* Form Container */}
           <View style={styles.formContainer}>
 
-            {/* Username Field */}
+            {/* Email Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Username</Text>
-              <View style={[styles.inputWrapper, isUserFocused && styles.inputWrapperFocused]}>
+              <Text style={styles.label}>Email</Text>
+              <View style={[styles.inputWrapper, isEmailFocused && styles.inputWrapperFocused]}>
                 <View style={styles.iconContainer}>
-                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={isUserFocused ? primaryColor : '#9CA3AF'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <Circle cx="12" cy="7" r="4" />
+                  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={isEmailFocused ? primaryColor : '#9CA3AF'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <Path d="M22 6l-10 7L2 6" />
                   </Svg>
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="Masukkan Username..."
+                  placeholder="Masukkan Email..."
                   placeholderTextColor="#9CA3AF"
-                  value={username}
-                  onChangeText={setUsername}
-                  onFocus={() => setIsUserFocused(true)}
-                  onBlur={() => setIsUserFocused(false)}
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setIsEmailFocused(true)}
+                  onBlur={() => setIsEmailFocused(false)}
                 />
               </View>
             </View>
@@ -135,11 +150,16 @@ export default function LoginScreen({ navigation }) {
 
             {/* Login Button */}
             <TouchableOpacity
-              style={styles.loginButton}
+              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
               onPress={handleLogin}
               activeOpacity={0.8}
+              disabled={loading}
             >
-              <Text style={styles.loginButtonText}>Log in</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.loginButtonText}>Log in</Text>
+              )}
             </TouchableOpacity>
 
             {/* Divider */}
@@ -307,6 +327,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFF',
     letterSpacing: 0.5,
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
   dividerContainer: {
     flexDirection: 'row',

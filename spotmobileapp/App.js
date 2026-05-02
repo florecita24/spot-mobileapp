@@ -12,43 +12,27 @@ import NotificationScreen from './screens/NotificationScreen';
 import TrackDeviceScreen from './screens/TrackDeviceScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
+import { getSession } from './constants/supabase';
 
 const Stack = createNativeStackNavigator();
 
-function AuthStack() {
-  return (
-    <Stack.Navigator
-      initialRouteName="Login"
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade', // Smooth transition like tabs
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
-      <Stack.Screen name="Dashboard" component={DashboardScreen} />
-      <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
-      <Stack.Screen name="AddDevice" component={AddDeviceScreen} />
-      <Stack.Screen name="EditConnection" component={EditConnectionScreen} />
-      <Stack.Screen name="Notification" component={NotificationScreen} />
-      <Stack.Screen name="TrackDevice" component={TrackDeviceScreen} />
-      <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-    </Stack.Navigator>
-  );
-}
-
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const [userSession, setUserSession] = useState(null);
 
   useEffect(() => {
-    // Splash screen duration: 3 seconds
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
-
-    return () => clearTimeout(timer);
+    checkSession();
   }, []);
+
+  const checkSession = async () => {
+    const { session } = await getSession();
+    setUserSession(session);
+    
+    // Splash screen duration: 2 seconds
+    setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+  };
 
   if (isLoading) {
     return <SplashScreen />;
@@ -56,7 +40,78 @@ export default function App() {
 
   return (
     <NavigationContainer>
-      <AuthStack />
+      <Stack.Navigator
+        initialRouteName={userSession ? 'Dashboard' : 'Login'}
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+        }}
+      >
+        <Stack.Screen
+          name="Login"
+          component={LoginScreen}
+          options={{ animation: 'fade' }}
+        />
+        <Stack.Screen
+          name="SignUp"
+          component={SignUpScreen}
+          options={{ animation: 'fade' }}
+        />
+        <Stack.Screen
+          name="Dashboard"
+          component={DashboardScreen}
+          options={{ animation: 'fade' }}
+        />
+        <Stack.Screen
+          name="DeviceDetail"
+          component={DeviceDetailScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="AddDevice"
+          component={AddDeviceScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="EditConnection"
+          component={EditConnectionScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="Notification"
+          component={NotificationScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="TrackDevice"
+          component={TrackDeviceScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+        <Stack.Screen
+          name="EditProfile"
+          component={EditProfileScreen}
+          options={{
+            animation: 'fade',
+          }}
+        />
+      </Stack.Navigator>
     </NavigationContainer>
   );
 }

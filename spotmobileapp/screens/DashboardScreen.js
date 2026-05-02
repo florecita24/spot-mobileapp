@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { getSession, getProfile } from '../constants/supabase';
 
 const { width } = Dimensions.get('window');
 const primaryColor = COLORS?.primary || '#FF6B47';
@@ -98,6 +99,28 @@ const ProfileIcon = ({ color }) => (
 
 // --- Component ---
 export default function DashboardScreen({ navigation }) {
+  const [firstName, setFirstName] = useState('User');
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const { session } = await getSession();
+        if (session?.user?.id) {
+          const { profile } = await getProfile(session.user.id);
+          if (profile?.full_name) {
+            // Extract first name (first word of full name)
+            const firstNameOnly = profile.full_name.split(' ')[0];
+            setFirstName(firstNameOnly);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
   const devices = [
     {
       id: 'SPOT-1',
@@ -122,7 +145,7 @@ export default function DashboardScreen({ navigation }) {
       {/* Sleek Header */}
       <View style={styles.header}>
         <View style={styles.headerTextGroup}>
-          <Text style={styles.greeting}>Halo, Favian! 👋</Text>
+          <Text style={styles.greeting}>Halo, {firstName}! 👋</Text>
           <Text style={styles.subtitle}>Siap melacak perangkatmu?</Text>
         </View>
         <TouchableOpacity style={styles.profileAvatar}>

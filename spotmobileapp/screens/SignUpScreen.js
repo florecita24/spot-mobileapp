@@ -9,9 +9,11 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { signUp } from '../constants/supabase';
 
 // Fallback colors to ensure stability
 const primaryColor = COLORS?.primary || '#FF6B47';
@@ -19,12 +21,13 @@ const backgroundColor = '#F9FAFB';
 const surfaceColor = '#FFFFFF';
 
 export default function SignUpScreen({ navigation }) {
-  const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // States for modern input focus effects
   const [isUserFocused, setIsUserFocused] = useState(false);
@@ -32,19 +35,35 @@ export default function SignUpScreen({ navigation }) {
   const [isPassFocused, setIsPassFocused] = useState(false);
   const [isConfirmPassFocused, setIsConfirmPassFocused] = useState(false);
 
-  const handleSignUp = () => {
-    if (!username || !email || !password || !confirmPassword) {
-      alert('Please fill in all fields');
+  const handleSignUp = async () => {
+    if (!fullName || !email || !password || !confirmPassword) {
+      alert('Mohon isi semua field');
       return;
     }
 
     if (password !== confirmPassword) {
-      alert('Passwords do not match');
+      alert('Password tidak cocok');
       return;
     }
 
-    // TODO: Handle sign up logic here
-    alert('Sign up with: ' + email);
+    if (password.length < 6) {
+      alert('Password minimal 6 karakter');
+      return;
+    }
+
+    setLoading(true);
+    const { user, error } = await signUp(email, password, fullName);
+    setLoading(false);
+
+    if (error) {
+      alert('Sign up gagal: ' + error.message);
+      return;
+    }
+
+    if (user) {
+      alert('Sign up berhasil! Silakan login.');
+      navigation.navigate('Login');
+    }
   };
 
   return (
@@ -73,9 +92,9 @@ export default function SignUpScreen({ navigation }) {
           {/* Form Container */}
           <View style={styles.formContainer}>
             
-            {/* Username Field */}
+            {/* Full Name Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={styles.label}>Full Name</Text>
               <View style={[styles.inputWrapper, isUserFocused && styles.inputWrapperFocused]}>
                 <View style={styles.iconContainer}>
                   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={isUserFocused ? primaryColor : '#9CA3AF'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -85,10 +104,10 @@ export default function SignUpScreen({ navigation }) {
                 </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="Masukkan Username..."
+                  placeholder="Masukkan Full Name..."
                   placeholderTextColor="#9CA3AF"
-                  value={username}
-                  onChangeText={setUsername}
+                  value={fullName}
+                  onChangeText={setFullName}
                   onFocus={() => setIsUserFocused(true)}
                   onBlur={() => setIsUserFocused(false)}
                 />
@@ -198,11 +217,16 @@ export default function SignUpScreen({ navigation }) {
 
             {/* Sign Up Button */}
             <TouchableOpacity
-              style={styles.signUpButton}
+              style={[styles.signUpButton, loading && styles.signUpButtonDisabled]}
               onPress={handleSignUp}
               activeOpacity={0.8}
+              disabled={loading}
             >
-              <Text style={styles.signUpButtonText}>Sign Up</Text>
+              {loading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.signUpButtonText}>Sign Up</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -327,6 +351,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFF',
     letterSpacing: 0.5,
+  },
+  signUpButtonDisabled: {
+    opacity: 0.6,
   },
   footer: {
     flexDirection: 'row',

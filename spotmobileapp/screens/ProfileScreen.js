@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { getSession, getProfile } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -118,6 +119,25 @@ const LogoutIcon = ({ color, size = 20 }) => (
 
 
 export default function ProfileScreen({ navigation }) {
+  const [profileName, setProfileName] = useState('User');
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const { session } = await getSession();
+        if (session?.user?.id) {
+          const { profile } = await getProfile(session.user.id);
+          if (profile?.full_name) {
+            setProfileName(profile.full_name);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
 
   const menuItems = [
     { id: '1', title: 'Setting Aplikasi', icon: SettingsIcon, color: '#EF4444' }, // Red
@@ -160,7 +180,7 @@ export default function ProfileScreen({ navigation }) {
               <UserIcon color={primaryColor} size={40} />
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Favian Rafi L</Text>
+              <Text style={styles.profileName}>{profileName}</Text>
               
               <TouchableOpacity 
                 style={styles.editBtn} 

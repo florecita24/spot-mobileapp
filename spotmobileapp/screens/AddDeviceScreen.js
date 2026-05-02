@@ -66,10 +66,12 @@ const ChevronDownIcon = ({ color, size = 20, isExpanded }) => (
 
 // --- Component ---
 export default function AddDeviceScreen({ navigation }) {
+  const [deviceName, setDeviceName] = useState('');
   const [deviceId, setDeviceId] = useState('');
   const [ssid, setSsid] = useState('');
   const [password, setPassword] = useState('');
 
+  const [isNameFocused, setIsNameFocused] = useState(false);
   const [isIdFocused, setIsIdFocused] = useState(false);
   const [isSsidFocused, setIsSsidFocused] = useState(false);
   const [isPassFocused, setIsPassFocused] = useState(false);
@@ -106,6 +108,24 @@ export default function AddDeviceScreen({ navigation }) {
         
         {/* Form Card */}
         <View style={styles.card}>
+
+          {/* Nama Perangkat Input */}
+          <View style={styles.inputGroup}>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Nama Perangkat</Text>
+            </View>
+            <View style={[styles.inputWrapper, isNameFocused && styles.inputWrapperFocused]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Masukkan nama perangkat..."
+                placeholderTextColor="#9CA3AF"
+                value={deviceName}
+                onChangeText={setDeviceName}
+                onFocus={() => setIsNameFocused(true)}
+                onBlur={() => setIsNameFocused(false)}
+              />
+            </View>
+          </View>
           
           {/* ID Perangkat Input */}
           <View style={styles.inputGroup}>
