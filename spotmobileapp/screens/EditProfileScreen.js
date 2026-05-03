@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
 import { getSession, getProfile, updateProfile, changePassword, uploadAvatar } from '../constants/supabase';
 
@@ -83,26 +84,74 @@ export default function EditProfileScreen({ navigation }) {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const { session } = await getSession();
-        if (session?.user?.id) {
-          setUserId(session.user.id);
-          const { profile } = await getProfile(session.user.id);
-          if (profile?.full_name) {
-            setProfileName(profile.full_name);
-            setRenameInput(profile.full_name);
-                     setAvatarUrl(profile?.avatar_url);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUserProfile = async () => {
+        try {
+          const { session } = await getSession();
+          if (session?.user?.id) {
+            setUserId(session.user.id);
+            const { profile } = await getProfile(session.user.id);
+            if (profile?.full_name) {
+              setProfileName(profile.full_name);
+              setRenameInput(profile.full_name);
+            }
+            if (profile?.avatar_url) {
+              setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
+            }
           }
+        } catch (error) {
+          console.error('Failed to fetch profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      }
-    };
+      };
+      fetchUserProfile();
+    }, [])
+  );
 
-    fetchUserProfile();
-  }, []);
+  const handlePickAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setErrorMessage('Izin akses galeri diperlukan untuk mengubah foto profil.');
+        setShowErrorModal(true);
+        setTimeout(() => setShowErrorModal(false), 2500);
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingAvatar(true);
+        const { uri, fileName } = result.assets[0];
+        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
+        setUploadingAvatar(false);
+
+        if (error) {
+          setErrorMessage('Terjadi kesalahan saat mengupload foto profil.');
+          setShowErrorModal(true);
+          setTimeout(() => setShowErrorModal(false), 2500);
+          console.error('Avatar upload error:', error);
+          return;
+        }
+
+        setAvatarUrl(url);
+        setSuccessMessage('Foto profil Anda telah berhasil diperbarui.');
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
+      }
+    } catch (error) {
+      setUploadingAvatar(false);
+      setErrorMessage('Terjadi kesalahan: ' + error.message);
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+      console.error('Image picker error:', error);
+    }
+  };
 
   const handleRenameProfile = async () => {
     if (renameInput.trim() && userId) {
@@ -218,6 +267,16 @@ export default function EditProfileScreen({ navigation }) {
                 <Image
                   source={{ uri: avatarUrl }}
                   style={styles.avatarImage}
+                  onError={() => {
+                    // Force a fresh cache-busting URL on error before giving up
+                    const base = avatarUrl.split('?')[0];
+                    const retryUrl = `${base}?t=${Date.now()}`;
+                    if (retryUrl !== avatarUrl) {
+                      setAvatarUrl(retryUrl);
+                    } else {
+                      setAvatarUrl(null);
+                    }
+                  }}
                 />
               ) : (
                 <UserAvatarIcon color={primaryColor} />
@@ -397,42 +456,7 @@ export default function EditProfileScreen({ navigation }) {
   );
 }
 
-  const handlePickAvatar = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Denied', 'Izin akses galeri diperlukan untuk mengubah foto profil.');
-        return;
-      }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setUploadingAvatar(true);
-        const { uri, fileName } = result.assets[0];
-        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
-        setUploadingAvatar(false);
-
-        if (error) {
-          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
-          console.error('Avatar upload error:', error);
-          return;
-        }
-
-        setAvatarUrl(url);
-        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
-      }
-    } catch (error) {
-      setUploadingAvatar(false);
-      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
-      console.error('Image picker error:', error);
-    }
-  };
 
 const styles = StyleSheet.create({
   container: {

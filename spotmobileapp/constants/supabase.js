@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const SUPABASE_URL = 'https://vyskbzukdnksnqkvfwrc.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_1XSbRhhIbNp0vSu9P3IoAg_EOsUtY7s';
@@ -155,36 +156,58 @@ export const changePassword = async (oldPassword, newPassword) => {
 // Avatar Functions
 export const uploadAvatar = async (userId, fileUri, fileName) => {
   try {
-    // Read file as blob
-    const response = await fetch(fileUri);
-    const blob = await response.blob();
+    // Determine MIME type from file extension
+    const ext = (fileName || 'avatar.jpg').split('.').pop().toLowerCase();
+    const mimeTypes = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+    };
+    const contentType = mimeTypes[ext] || 'image/jpeg';
 
-    // Generate unique filename with timestamp
+    // Read file as base64 using expo-file-system (fetch().blob() returns empty in React Native)
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: 'base64',
+    });
+
+    // Convert base64 → Uint8Array so Supabase SDK can upload it properly
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Generate unique path
     const timestamp = Date.now();
-    const path = `${userId}/${timestamp}_${fileName}`;
+    const safeFileName = fileName ? fileName.replace(/[^a-zA-Z0-9._-]/g, '_') : 'avatar.jpg';
+    const path = `${userId}/${timestamp}_${safeFileName}`;
 
-    // Upload to storage
+    // Upload Uint8Array to Supabase storage
     const { data, error } = await supabase.storage
       .from('avatars')
-      .upload(path, blob, {
+      .upload(path, bytes, {
+        contentType,
         cacheControl: '3600',
-        upsert: false,
+        upsert: true,
       });
 
     if (error) throw error;
 
-    // Get public URL
+    // Get public URL with cache-buster so React Native Image always fetches fresh image
     const { data: urlData } = supabase.storage
       .from('avatars')
       .getPublicUrl(path);
 
-    const avatarUrl = urlData?.publicUrl;
+    const baseUrl = urlData?.publicUrl;
+    const avatarUrl = baseUrl ? `${baseUrl}?t=${timestamp}` : null;
 
-    // Update profile with new avatar URL
-    if (avatarUrl) {
+    // Save base URL (without cache-buster) to profiles table
+    if (baseUrl) {
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ avatar_url: avatarUrl })
+        .update({ avatar_url: baseUrl })
         .eq('id', userId);
 
       if (updateError) throw updateError;
@@ -192,6 +215,7 @@ export const uploadAvatar = async (userId, fileUri, fileName) => {
 
     return { url: avatarUrl, error: null };
   } catch (error) {
+    console.error('uploadAvatar error:', error);
     return { url: null, error };
   }
 };

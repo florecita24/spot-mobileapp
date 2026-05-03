@@ -11,6 +11,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
@@ -127,17 +128,20 @@ export default function ProfileScreen({ navigation }) {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [userId, setUserId] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         const { session } = await getSession();
         if (session?.user?.id) {
+          setUserId(session.user.id);
           const { profile } = await getProfile(session.user.id);
           if (profile?.full_name) {
             setProfileName(profile.full_name);
-                     setAvatarUrl(profile?.avatar_url);
-                     setUserId(session.user.id);
+          }
+          if (profile?.avatar_url) {
+            setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
           }
         }
       } catch (error) {
@@ -147,6 +151,43 @@ export default function ProfileScreen({ navigation }) {
 
     fetchUserProfile();
   }, []);
+
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Denied', 'Izin akses galeri diperlukan untuk mengupload foto profil.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingAvatar(true);
+        const { uri, fileName } = result.assets[0];
+        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
+        setUploadingAvatar(false);
+
+        if (error) {
+          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
+          console.error('Avatar upload error:', error);
+          return;
+        }
+
+        setAvatarUrl(url);
+        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
+      }
+    } catch (error) {
+      setUploadingAvatar(false);
+      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
+      console.error('Image picker error:', error);
+    }
+  };
 
   const menuItems = [
     { id: '1', title: 'Setting Aplikasi', icon: SettingsIcon, color: '#EF4444' }, // Red
@@ -158,7 +199,11 @@ export default function ProfileScreen({ navigation }) {
   ];
 
   const handleLogout = () => {
-    // Navigate back to Login
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
     navigation.reset({
       index: 0,
       routes: [{ name: 'Login' }],
@@ -196,6 +241,10 @@ export default function ProfileScreen({ navigation }) {
                 <Image 
                   source={{ uri: avatarUrl }} 
                   style={styles.avatarImage}
+                  onError={() => {
+                    console.warn('ProfileScreen: avatar URL broken, clearing...');
+                    setAvatarUrl(null);
+                  }}
                 />
               ) : (
                 <UserIcon color={primaryColor} size={40} />
@@ -270,6 +319,45 @@ export default function ProfileScreen({ navigation }) {
         </View>
       </View>
 
+      {/* Logout Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLogoutModal}
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <View style={styles.logoutModalOverlay}>
+          <View style={styles.logoutModalContent}>
+            {/* Icon */}
+            <View style={styles.logoutIconCircle}>
+              <LogoutIcon color="#DC2626" size={28} />
+            </View>
+
+            <Text style={styles.logoutModalTitle}>Keluar dari Akun?</Text>
+            <Text style={styles.logoutModalSubtitle}>
+              Kamu akan keluar dari sesi ini. Pastikan data kamu sudah tersimpan.
+            </Text>
+
+            <View style={styles.logoutBtnRow}>
+              <TouchableOpacity
+                style={styles.logoutBtnCancel}
+                activeOpacity={0.8}
+                onPress={() => setShowLogoutModal(false)}
+              >
+                <Text style={styles.logoutBtnCancelText}>Batal</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.logoutBtnConfirm}
+                activeOpacity={0.8}
+                onPress={confirmLogout}
+              >
+                <Text style={styles.logoutBtnConfirmText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -348,13 +436,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: primaryColor,
-      avatarImage: {
-        width: 76,
-        height: 76,
-        borderRadius: 38,
-      },
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarImage: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
   },
   profileInfo: {
     justifyContent: 'center',
@@ -452,41 +540,87 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#9CA3AF',
   },
+  logoutModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  logoutModalContent: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    alignItems: 'center',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.2,
+    shadowRadius: 30,
+    elevation: 12,
+  },
+  logoutIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(220, 38, 38, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoutModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  logoutModalSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 28,
+    paddingHorizontal: 8,
+  },
+  logoutBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutBtnCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  logoutBtnCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  logoutBtnConfirm: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#DC2626',
+    alignItems: 'center',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoutBtnConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFF',
+  },
 });
 
-  const handlePickImage = async () => {
-    try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Permission Denied', 'Izin akses galeri diperlukan untuk mengupload foto profil.');
-        return;
-      }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setUploadingAvatar(true);
-        const { uri, fileName } = result.assets[0];
-        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
-        setUploadingAvatar(false);
-
-        if (error) {
-          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
-          console.error('Avatar upload error:', error);
-          return;
-        }
-
-        setAvatarUrl(url);
-        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
-      }
-    } catch (error) {
-      setUploadingAvatar(false);
-      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
-      console.error('Image picker error:', error);
-    }
-  };

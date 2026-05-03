@@ -113,7 +113,7 @@ export default function DashboardScreen({ navigation }) {
             // Extract first name (first word of full name)
             const firstNameOnly = profile.full_name.split(' ')[0];
             setFirstName(firstNameOnly);
-                     setAvatarUrl(profile?.avatar_url);
+                     setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
           }
         }
       } catch (error) {
@@ -156,6 +156,10 @@ export default function DashboardScreen({ navigation }) {
             <Image
               source={{ uri: avatarUrl }}
               style={styles.profileAvatarImage}
+              onError={() => {
+                console.warn('DashboardScreen: avatar URL broken, clearing...');
+                setAvatarUrl(null);
+              }}
             />
           ) : (
             <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
@@ -319,11 +323,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: primaryColor,
-    profileAvatarImage: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-    },
+  },
+  profileAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   scrollContent: {
     paddingHorizontal: 20,
