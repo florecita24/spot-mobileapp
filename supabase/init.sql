@@ -5,6 +5,20 @@
 -- Enable required extensions
 create extension if not exists "pgcrypto";
 
+-- Set timezone to Indonesia (WIB = UTC+7)
+set timezone to 'Asia/Jakarta';
+
+-- ============================================
+-- Helper Function for auto-updating updated_at
+-- ============================================
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+  new.updated_at = now() at time zone 'Asia/Jakarta';
+  return new;
+end;
+$$ language plpgsql;
+
 -- ============================================
 -- 1. PROFILES TABLE
 -- ============================================
@@ -12,9 +26,16 @@ create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique,
   full_name text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  avatar_url text,
+  created_at timestamptz default (now() at time zone 'Asia/Jakarta'),
+  updated_at timestamptz default (now() at time zone 'Asia/Jakarta')
 );
+
+-- Trigger untuk auto-update updated_at pada profiles
+create trigger profiles_updated_at_trigger
+before update on profiles
+for each row
+execute function update_updated_at_column();
 
 -- Enable RLS on profiles
 alter table profiles enable row level security;
@@ -44,9 +65,15 @@ create table devices (
   identifier text,
   is_active boolean default true,
   last_seen timestamptz,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  created_at timestamptz default (now() at time zone 'Asia/Jakarta'),
+  updated_at timestamptz default (now() at time zone 'Asia/Jakarta')
 );
+
+-- Trigger untuk auto-update updated_at pada devices
+create trigger devices_updated_at_trigger
+before update on devices
+for each row
+execute function update_updated_at_column();
 
 create unique index devices_identifier_key on devices(identifier);
 
@@ -86,9 +113,15 @@ create table connections (
   device_id uuid not null references devices(id) on delete cascade,
   ssid text not null,
   password text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  created_at timestamptz default (now() at time zone 'Asia/Jakarta'),
+  updated_at timestamptz default (now() at time zone 'Asia/Jakarta')
 );
+
+-- Trigger untuk auto-update updated_at pada connections
+create trigger connections_updated_at_trigger
+before update on connections
+for each row
+execute function update_updated_at_column();
 
 -- Create index for device queries
 create index connections_device_id_idx on connections(device_id);
@@ -134,7 +167,7 @@ create table device_locations (
   lat numeric not null,
   lng numeric not null,
   heading numeric,
-  recorded_at timestamptz not null
+  recorded_at timestamptz not null default (now() at time zone 'Asia/Jakarta')
 );
 
 -- Create index for efficient queries (device + timestamp)
@@ -169,7 +202,7 @@ create table notifications (
   body text,
   data jsonb,
   is_read boolean default false,
-  created_at timestamptz default now()
+  created_at timestamptz default (now() at time zone 'Asia/Jakarta')
 );
 
 -- Create index for user queries
@@ -197,6 +230,32 @@ create policy "notification_delete" on notifications for delete using (
 );
 
 -- ============================================
+-- 6. STORAGE: AVATARS BUCKET
+-- ============================================
+-- Create avatars bucket (run this in Supabase Dashboard if needed)
+-- INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true);
+
+-- RLS Policy: Users can upload avatars only to their own folder
+create policy "avatar_upload" on storage.objects for insert with check (
+  bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- RLS Policy: Users can update their own avatars
+create policy "avatar_update" on storage.objects for update with check (
+  bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- RLS Policy: Users can delete their own avatars
+create policy "avatar_delete" on storage.objects for delete using (
+  bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+-- RLS Policy: Public read access to avatars
+create policy "avatar_read" on storage.objects for select using (
+  bucket_id = 'avatars'
+);
+
+-- ============================================
 -- Notes:
 -- ============================================
 -- 1. Run this script in Supabase SQL Editor (Database -> SQL)
@@ -209,4 +268,11 @@ create policy "notification_delete" on notifications for delete using (
 -- 8. connections: ssid & password WiFi (dari AddDevice/EditConnection screens)
 -- 9. device_locations.heading dipertahankan untuk arah gerak perangkat
 -- 10. No device_users table (single-user per device)
--- 11. All timestamps use timestamptz for timezone support
+-- 11. ALL TIMESTAMPS: Menggunakan Asia/Jakarta (WIB = UTC+7)
+-- 12. created_at: Otomatis set saat record dibuat, tidak berubah
+-- 13. updated_at: Otomatis di-update saat record dimodifikasi via TRIGGER
+-- 14. Trigger 'update_updated_at_column()': Memastikan updated_at selalu berbeda dari created_at setelah perubahan
+-- 15. Tables dengan updated_at: profiles, devices, connections
+-- 16. profiles.avatar_url: URL untuk profile picture, disimpan saat user upload via ProfileScreen
+-- 17. Storage 'avatars' bucket: Public, menyimpan gambar dalam folder per user_id (avatars/{user_id}/*)
+-- 18. Untuk membuat bucket 'avatars', jalankan: INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true);

@@ -8,10 +8,13 @@ import {
   SafeAreaView,
   Platform,
   ScrollView,
+  Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../constants/colors';
-import { getSession, getProfile } from '../constants/supabase';
+import { getSession, getProfile, uploadAvatar } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -120,6 +123,9 @@ const LogoutIcon = ({ color, size = 20 }) => (
 
 export default function ProfileScreen({ navigation }) {
   const [profileName, setProfileName] = useState('User');
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -129,6 +135,8 @@ export default function ProfileScreen({ navigation }) {
           const { profile } = await getProfile(session.user.id);
           if (profile?.full_name) {
             setProfileName(profile.full_name);
+                     setAvatarUrl(profile?.avatar_url);
+                     setUserId(session.user.id);
           }
         }
       } catch (error) {
@@ -176,9 +184,22 @@ export default function ProfileScreen({ navigation }) {
         {/* Profile Card overlapping the curve */}
         <View style={styles.profileCard}>
           <View style={styles.profileLeft}>
-            <View style={styles.avatarContainer}>
-              <UserIcon color={primaryColor} size={40} />
-            </View>
+            <TouchableOpacity 
+              style={styles.avatarContainer}
+              onPress={handlePickImage}
+              disabled={uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <ActivityIndicator size="large" color={primaryColor} />
+              ) : avatarUrl ? (
+                <Image 
+                  source={{ uri: avatarUrl }} 
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <UserIcon color={primaryColor} size={40} />
+              )}
+            </TouchableOpacity>
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{profileName}</Text>
               
@@ -326,6 +347,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderWidth: 2,
     borderColor: primaryColor,
+      avatarImage: {
+        width: 76,
+        height: 76,
+        borderRadius: 38,
+      },
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -426,3 +452,40 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
 });
+
+  const handlePickImage = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Denied', 'Izin akses galeri diperlukan untuk mengupload foto profil.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingAvatar(true);
+        const { uri, fileName } = result.assets[0];
+        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
+        setUploadingAvatar(false);
+
+        if (error) {
+          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
+          console.error('Avatar upload error:', error);
+          return;
+        }
+
+        setAvatarUrl(url);
+        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
+      }
+    } catch (error) {
+      setUploadingAvatar(false);
+      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
+      console.error('Image picker error:', error);
+    }
+  };

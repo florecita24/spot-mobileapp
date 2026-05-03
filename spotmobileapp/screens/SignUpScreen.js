@@ -10,8 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
-import { Svg, Path, Circle, Rect, Line } from 'react-native-svg';
+import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
 import { signUp } from '../constants/supabase';
 
@@ -34,20 +35,26 @@ export default function SignUpScreen({ navigation }) {
   const [isEmailFocused, setIsEmailFocused] = useState(false);
   const [isPassFocused, setIsPassFocused] = useState(false);
   const [isConfirmPassFocused, setIsConfirmPassFocused] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleSignUp = async () => {
     if (!fullName || !email || !password || !confirmPassword) {
-      alert('Mohon isi semua field');
+      setErrorMessage('Mohon isi semua field');
+      setShowErrorModal(true);
       return;
     }
 
     if (password !== confirmPassword) {
-      alert('Password tidak cocok');
+      setErrorMessage('Password tidak cocok');
+      setShowErrorModal(true);
       return;
     }
 
     if (password.length < 6) {
-      alert('Password minimal 6 karakter');
+      setErrorMessage('Password minimal 6 karakter');
+      setShowErrorModal(true);
       return;
     }
 
@@ -56,13 +63,17 @@ export default function SignUpScreen({ navigation }) {
     setLoading(false);
 
     if (error) {
-      alert('Sign up gagal: ' + error.message);
+      setErrorMessage('Sign up gagal: ' + error.message);
+      setShowErrorModal(true);
       return;
     }
 
     if (user) {
-      alert('Sign up berhasil! Silakan login.');
-      navigation.navigate('Login');
+      setShowSuccessModal(true);
+      setTimeout(() => {
+        setShowSuccessModal(false);
+        navigation.navigate('Login');
+      }, 2000);
     }
   };
 
@@ -240,6 +251,49 @@ export default function SignUpScreen({ navigation }) {
 
         </View>
       </ScrollView>
+
+      {/* Error Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showErrorModal}
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <View style={styles.errorIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Circle cx="12" cy="12" r="10" />
+                <Line x1="15" y1="9" x2="9" y2="15" />
+                <Line x1="9" y1="9" x2="15" y2="15" />
+              </Svg>
+            </View>
+            <Text style={styles.errorTitle}>Sign Up Gagal</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSuccessModal}
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                <Polyline points="22 4 12 14.01 9 11.01" />
+              </Svg>
+            </View>
+            <Text style={styles.successTitle}>Sign Up Berhasil!</Text>
+            <Text style={styles.successMessage}>Silakan login dengan akun Anda.</Text>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -370,5 +424,97 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: primaryColor,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  errorModalContent: {
+    width: '100%',
+    maxWidth: 300,
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  errorIconContainer: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 21,
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  successModalContent: {
+    width: '100%',
+    maxWidth: 300,
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  successIconContainer: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 21,
   },
 });

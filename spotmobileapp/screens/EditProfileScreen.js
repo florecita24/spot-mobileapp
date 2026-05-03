@@ -11,10 +11,13 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Modal,
+  Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../constants/colors';
-import { getSession, getProfile, updateProfile } from '../constants/supabase';
+import { getSession, getProfile, updateProfile, changePassword, uploadAvatar } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const bgColor = '#F4F6F8';
@@ -64,6 +67,7 @@ export default function EditProfileScreen({ navigation }) {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -75,6 +79,8 @@ export default function EditProfileScreen({ navigation }) {
   // Rename Modal Logic
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameInput, setRenameInput] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -86,6 +92,7 @@ export default function EditProfileScreen({ navigation }) {
           if (profile?.full_name) {
             setProfileName(profile.full_name);
             setRenameInput(profile.full_name);
+                     setAvatarUrl(profile?.avatar_url);
           }
         }
       } catch (error) {
@@ -108,6 +115,7 @@ export default function EditProfileScreen({ navigation }) {
         } else {
           setProfileName(renameInput.trim());
           setRenameModalVisible(false);
+          setSuccessMessage('Nama profil Anda telah berhasil diperbarui.');
           setShowSuccessModal(true);
           setTimeout(() => setShowSuccessModal(false), 2000);
         }
@@ -121,9 +129,58 @@ export default function EditProfileScreen({ navigation }) {
     }
   };
 
-  const handleSave = () => {
-    // Save logic here
-    navigation.goBack();
+  const handleSave = async () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      setErrorMessage('Semua field password wajib diisi.');
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMessage('Password baru minimal 6 karakter.');
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('Konfirmasi password tidak cocok.');
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+      return;
+    }
+
+    if (oldPassword === newPassword) {
+      setErrorMessage('Password baru harus berbeda dari password lama.');
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await changePassword(oldPassword, newPassword);
+
+      if (error) {
+        setErrorMessage(error.message || 'Gagal mengubah password.');
+        setShowErrorModal(true);
+        setTimeout(() => setShowErrorModal(false), 2500);
+      } else {
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setSuccessMessage('Password Anda telah berhasil diperbarui.');
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
+      }
+    } catch (error) {
+      setErrorMessage('Terjadi kesalahan: ' + error.message);
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -154,8 +211,22 @@ export default function EditProfileScreen({ navigation }) {
           {/* Profile Picture Section */}
           <View style={styles.profileSection}>
             <View style={styles.avatarWrapper}>
-              <UserAvatarIcon color={primaryColor} />
-              <TouchableOpacity style={styles.editAvatarBtn} activeOpacity={0.8}>
+              {uploadingAvatar ? (
+                <ActivityIndicator size="large" color={primaryColor} />
+              ) : avatarUrl ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <UserAvatarIcon color={primaryColor} />
+              )}
+              <TouchableOpacity 
+                style={styles.editAvatarBtn} 
+                activeOpacity={0.8}
+                onPress={handlePickAvatar}
+                disabled={uploadingAvatar}
+              >
                 <PencilIcon color={primaryColor} size={14} />
               </TouchableOpacity>
             </View>
@@ -235,8 +306,13 @@ export default function EditProfileScreen({ navigation }) {
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-            <Text style={styles.saveBtnText}>Simpan</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, loading && styles.saveBtnDisabled]}
+            onPress={handleSave}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            <Text style={styles.saveBtnText}>{loading ? 'Menyimpan...' : 'Simpan'}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -290,7 +366,7 @@ export default function EditProfileScreen({ navigation }) {
               </Svg>
             </View>
             <Text style={styles.successTitle}>Perubahan Tersimpan!</Text>
-            <Text style={styles.successMessage}>Nama profil Anda telah berhasil diperbarui.</Text>
+            <Text style={styles.successMessage}>{successMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -319,6 +395,43 @@ export default function EditProfileScreen({ navigation }) {
     </View>
   );
 }
+
+  const handlePickAvatar = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission Denied', 'Izin akses galeri diperlukan untuk mengubah foto profil.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUploadingAvatar(true);
+        const { uri, fileName } = result.assets[0];
+        const { url, error } = await uploadAvatar(userId, uri, fileName || 'avatar.jpg');
+        setUploadingAvatar(false);
+
+        if (error) {
+          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
+          console.error('Avatar upload error:', error);
+          return;
+        }
+
+        setAvatarUrl(url);
+        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
+      }
+    } catch (error) {
+      setUploadingAvatar(false);
+      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
+      console.error('Image picker error:', error);
+    }
+  };
 
 const styles = StyleSheet.create({
   container: {
@@ -470,6 +583,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 5,
+  },
+  saveBtnDisabled: {
+    opacity: 0.7,
   },
   saveBtnText: {
     color: '#FFF',

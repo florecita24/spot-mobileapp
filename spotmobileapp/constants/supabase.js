@@ -121,4 +121,93 @@ export const updateProfile = async (userId, updates) => {
   }
 };
 
+export const changePassword = async (oldPassword, newPassword) => {
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+
+    const email = userData.user?.email;
+    if (!email) {
+      throw new Error('Email pengguna tidak ditemukan.');
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: oldPassword,
+    });
+
+    if (signInError) {
+      throw new Error('Password lama tidak sesuai.');
+    }
+
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) throw error;
+    return { user: data.user, error: null };
+  } catch (error) {
+    return { user: null, error };
+  }
+};
+
+
+// Avatar Functions
+export const uploadAvatar = async (userId, fileUri, fileName) => {
+  try {
+    // Read file as blob
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const path = `${userId}/${timestamp}_${fileName}`;
+
+    // Upload to storage
+    const { data, error } = await supabase.storage
+      .from('avatars')
+      .upload(path, blob, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) throw error;
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(path);
+
+    const avatarUrl = urlData?.publicUrl;
+
+    // Update profile with new avatar URL
+    if (avatarUrl) {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', userId);
+
+      if (updateError) throw updateError;
+    }
+
+    return { url: avatarUrl, error: null };
+  } catch (error) {
+    return { url: null, error };
+  }
+};
+
+// Delete old avatar when uploading new one
+export const deleteAvatar = async (userId, filePath) => {
+  try {
+    const { error } = await supabase.storage
+      .from('avatars')
+      .remove([filePath]);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    return { error };
+  }
+};
+
 export { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY };

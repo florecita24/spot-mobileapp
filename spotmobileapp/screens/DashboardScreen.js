@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Platform,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
@@ -100,6 +101,7 @@ const ProfileIcon = ({ color }) => (
 // --- Component ---
 export default function DashboardScreen({ navigation }) {
   const [firstName, setFirstName] = useState('User');
+  const [avatarUrl, setAvatarUrl] = useState(null);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -111,6 +113,7 @@ export default function DashboardScreen({ navigation }) {
             // Extract first name (first word of full name)
             const firstNameOnly = profile.full_name.split(' ')[0];
             setFirstName(firstNameOnly);
+                     setAvatarUrl(profile?.avatar_url);
           }
         }
       } catch (error) {
@@ -149,7 +152,14 @@ export default function DashboardScreen({ navigation }) {
           <Text style={styles.subtitle}>Siap melacak perangkatmu?</Text>
         </View>
         <TouchableOpacity style={styles.profileAvatar}>
-          <Text style={styles.avatarText}>F</Text>
+          {avatarUrl ? (
+            <Image
+              source={{ uri: avatarUrl }}
+              style={styles.profileAvatarImage}
+            />
+          ) : (
+            <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -309,6 +319,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: primaryColor,
+    profileAvatarImage: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+    },
   },
   scrollContent: {
     paddingHorizontal: 20,
