@@ -16,27 +16,13 @@ export default function SplashScreen() {
         
         <Image source={require('../assets/splash-bg.png')} style={{width: '100%', height: '100%'}} resizeMode="cover" />
       */}
-      
-      <View style={styles.content}>
-        <Text style={styles.text}>SP</Text>
-        
-        <View style={styles.iconContainer}>
-          <Svg width={65} height={65} viewBox="0 0 100 100">
-            {/* Lingkaran luar putih tebal */}
-            <Circle cx="50" cy="50" r="28" stroke="white" strokeWidth="10" fill="none" />
-            
-            {/* Titik tengah putih */}
-            <Circle cx="50" cy="50" r="12" fill="white" />
-            
-            {/* Garis horizontal gelap */}
-            <Line x1="0" y1="50" x2="100" y2="50" stroke="#2B2B2B" strokeWidth="6" />
-            
-            {/* Garis vertikal gelap */}
-            <Line x1="50" y1="0" x2="50" y2="100" stroke="#2B2B2B" strokeWidth="6" />
-          </Svg>
-        </View>
 
-        <Text style={styles.text}>T</Text>
+      <View style={styles.logoContainer}>
+        <Image
+          source={require('../assets/logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
     </View>
   );
@@ -45,25 +31,17 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E75A41', // Warna orange-coral sesuai gambar
+    backgroundColor: '#E75A41',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconContainer: {
-    marginHorizontal: 2,
+  logoContainer: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  text: {
-    fontSize: 65,
-    fontWeight: '900',
-    color: 'white',
-    letterSpacing: 2,
+  logoImage: {
+    width: 200,
+    height: 200,
   },
 });
 

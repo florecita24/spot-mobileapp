@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
 import { getSession, getProfile } from '../constants/supabase';
 
@@ -103,26 +104,30 @@ export default function DashboardScreen({ navigation }) {
   const [firstName, setFirstName] = useState('User');
   const [avatarUrl, setAvatarUrl] = useState(null);
 
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const { session } = await getSession();
-        if (session?.user?.id) {
-          const { profile } = await getProfile(session.user.id);
-          if (profile?.full_name) {
-            // Extract first name (first word of full name)
-            const firstNameOnly = profile.full_name.split(' ')[0];
-            setFirstName(firstNameOnly);
-                     setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUserProfile = async () => {
+        try {
+          const { session } = await getSession();
+          if (session?.user?.id) {
+            const { profile } = await getProfile(session.user.id);
+            if (profile?.full_name) {
+              // Extract first name (first word of full name)
+              const firstNameOnly = profile.full_name.split(' ')[0];
+              setFirstName(firstNameOnly);
+            }
+            if (profile?.avatar_url) {
+              setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
+            }
           }
+        } catch (error) {
+          console.error('Failed to fetch profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      }
-    };
+      };
 
-    fetchUserProfile();
-  }, []);
+      fetchUserProfile();
+    }, [])
+  );
 
   const devices = [
     {

@@ -260,27 +260,23 @@ export default function EditProfileScreen({ navigation }) {
           
           {/* Profile Picture Section */}
           <View style={styles.profileSection}>
-            <View style={styles.avatarWrapper}>
-              {uploadingAvatar ? (
-                <ActivityIndicator size="large" color={primaryColor} />
-              ) : avatarUrl ? (
-                <Image
-                  source={{ uri: avatarUrl }}
-                  style={styles.avatarImage}
-                  onError={() => {
-                    // Force a fresh cache-busting URL on error before giving up
-                    const base = avatarUrl.split('?')[0];
-                    const retryUrl = `${base}?t=${Date.now()}`;
-                    if (retryUrl !== avatarUrl) {
-                      setAvatarUrl(retryUrl);
-                    } else {
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatarWrapper}>
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="large" color={primaryColor} />
+                ) : avatarUrl ? (
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.avatarImage}
+                    onError={() => {
+                      console.warn('EditProfileScreen: avatar URL broken, clearing...');
                       setAvatarUrl(null);
-                    }
-                  }}
-                />
-              ) : (
-                <UserAvatarIcon color={primaryColor} />
-              )}
+                    }}
+                  />
+                ) : (
+                  <UserAvatarIcon color={primaryColor} />
+                )}
+              </View>
               <TouchableOpacity 
                 style={styles.editAvatarBtn} 
                 activeOpacity={0.8}
@@ -501,6 +497,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    position: 'relative',
+    marginBottom: 16,
+  },
   avatarWrapper: {
     width: 120,
     height: 120,
@@ -510,17 +512,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,
     shadowRadius: 16,
     elevation: 4,
   },
+  avatarImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
   editAvatarBtn: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
+    bottom: 4,
+    right: 4,
     backgroundColor: '#FFF',
     width: 32,
     height: 32,
@@ -529,6 +536,7 @@ const styles = StyleSheet.create({
     borderColor: primaryColor,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 5,
   },
   nameRow: {
     flexDirection: 'row',

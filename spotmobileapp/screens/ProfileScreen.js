@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
 import { getSession, getProfile, uploadAvatar } from '../constants/supabase';
 
@@ -130,27 +131,35 @@ export default function ProfileScreen({ navigation }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const { session } = await getSession();
-        if (session?.user?.id) {
-          setUserId(session.user.id);
-          const { profile } = await getProfile(session.user.id);
-          if (profile?.full_name) {
-            setProfileName(profile.full_name);
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUserProfile = async () => {
+        try {
+          const { session } = await getSession();
+          if (session?.user?.id) {
+            setUserId(session.user.id);
+            const { profile } = await getProfile(session.user.id);
+            if (profile?.full_name) {
+              setProfileName(profile.full_name);
+            }
+            if (profile?.avatar_url) {
+              setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
+            }
           }
-          if (profile?.avatar_url) {
-            setAvatarUrl(`${profile.avatar_url}?t=${Date.now()}`);
-          }
+        } catch (error) {
+          console.error('Failed to fetch profile:', error);
         }
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      }
-    };
+      };
 
-    fetchUserProfile();
-  }, []);
+      fetchUserProfile();
+    }, [])
+  );
+
+  // States for modals
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handlePickImage = async () => {
     try {
@@ -174,17 +183,23 @@ export default function ProfileScreen({ navigation }) {
         setUploadingAvatar(false);
 
         if (error) {
-          Alert.alert('Upload Gagal', 'Terjadi kesalahan saat mengupload foto profil.');
+          setErrorMessage('Terjadi kesalahan saat mengupload foto profil.');
+          setShowErrorModal(true);
+          setTimeout(() => setShowErrorModal(false), 2500);
           console.error('Avatar upload error:', error);
           return;
         }
 
         setAvatarUrl(url);
-        Alert.alert('Sukses', 'Foto profil berhasil diperbarui!');
+        setSuccessMessage('Foto profil Anda telah berhasil diperbarui.');
+        setShowSuccessModal(true);
+        setTimeout(() => setShowSuccessModal(false), 2000);
       }
     } catch (error) {
       setUploadingAvatar(false);
-      Alert.alert('Error', 'Terjadi kesalahan: ' + error.message);
+      setErrorMessage('Terjadi kesalahan: ' + error.message);
+      setShowErrorModal(true);
+      setTimeout(() => setShowErrorModal(false), 2500);
       console.error('Image picker error:', error);
     }
   };
@@ -355,6 +370,48 @@ export default function ProfileScreen({ navigation }) {
                 <Text style={styles.logoutBtnConfirmText}>Logout</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showSuccessModal}
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalContent}>
+            <View style={styles.successIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke={primaryColor} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Polyline points="20 6 9 17 4 12" />
+              </Svg>
+            </View>
+            <Text style={styles.successTitle}>Berhasil!</Text>
+            <Text style={styles.successMessage}>{successMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showErrorModal}
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.errorModalContent}>
+            <View style={styles.errorIconContainer}>
+              <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                <Circle cx="12" cy="12" r="10" />
+                <Line x1="15" y1="9" x2="9" y2="15" />
+                <Line x1="9" y1="9" x2="15" y2="15" />
+              </Svg>
+            </View>
+            <Text style={styles.errorTitle}>Gagal!</Text>
+            <Text style={styles.errorMessage}>{errorMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -620,6 +677,94 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#FFF',
+  },
+  successModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  successModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  successIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  errorModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.15)',
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  errorIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 
