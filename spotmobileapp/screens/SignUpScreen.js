@@ -40,21 +40,27 @@ export default function SignUpScreen({ navigation }) {
   const [errorMessage, setErrorMessage] = useState('');
 
   const handleSignUp = async () => {
-    if (!fullName || !email || !password || !confirmPassword) {
-      setErrorMessage('Mohon isi semua field');
+    // Helper function biar error otomatis hilang dalam 2 detik
+    const triggerError = (message) => {
+      setErrorMessage(message);
       setShowErrorModal(true);
+      setTimeout(() => {
+        setShowErrorModal(false);
+      }, 2000);
+    };
+
+    if (!fullName || !email || !password || !confirmPassword) {
+      triggerError('Mohon isi semua field');
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('Password tidak cocok');
-      setShowErrorModal(true);
+      triggerError('Password tidak cocok');
       return;
     }
 
     if (password.length < 6) {
-      setErrorMessage('Password minimal 6 karakter');
-      setShowErrorModal(true);
+      triggerError('Password minimal 6 karakter');
       return;
     }
 
@@ -63,8 +69,7 @@ export default function SignUpScreen({ navigation }) {
     setLoading(false);
 
     if (error) {
-      setErrorMessage('Sign up gagal: ' + error.message);
-      setShowErrorModal(true);
+      triggerError('Sign up gagal: ' + error.message);
       return;
     }
 
@@ -76,7 +81,7 @@ export default function SignUpScreen({ navigation }) {
       }, 2000);
     }
   };
-
+  
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
