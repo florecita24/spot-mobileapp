@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import * as ImagePicker from 'expo-image-picker';
 import { COLORS } from '../constants/colors';
 import { getSession, getProfile, uploadAvatar } from '../constants/supabase';

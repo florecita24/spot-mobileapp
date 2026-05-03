@@ -12,7 +12,7 @@ import NotificationScreen from './screens/NotificationScreen';
 import TrackDeviceScreen from './screens/TrackDeviceScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
-import { getSession } from './constants/supabase';
+import { getSession, getProfile, signOut } from './constants/supabase';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,7 +26,20 @@ export default function App() {
 
   const checkSession = async () => {
     const { session } = await getSession();
-    setUserSession(session);
+    
+    if (session) {
+      // Check if profile still exists (in case table was dropped)
+      const { error } = await getProfile(session.user.id);
+      if (error) {
+        // Profile not found, sign out to clear local session
+        await signOut();
+        setUserSession(null);
+      } else {
+        setUserSession(session);
+      }
+    } else {
+      setUserSession(null);
+    }
     
     // Splash screen duration: 2 seconds
     setTimeout(() => {
