@@ -29,9 +29,9 @@ export default function App() {
     
     if (session) {
       // Cek apakah data profil benar-benar ada dan tidak ada error
-      const { data, error } = await getProfile(session.user.id);
+      const { profile, error } = await getProfile(session.user.id);
       
-      if (error || !data) {
+      if (error || !profile) {
         // Profil tidak ditemukan (misal karena drop table), hapus sesi
         await signOut();
         setUserSession(null);

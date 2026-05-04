@@ -10,11 +10,14 @@ import {
   Platform,
   Dimensions,
   Image,
+  Alert,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
-import { getSession, getProfile } from '../constants/supabase';
+import { getSession, getProfile, getUserDevices, saveDeviceLocation, saveMotionLog, updateDevice } from '../constants/supabase';
+import { MQTT_TOPICS } from '../constants/mqtt';
+import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt } from '../services/mqttService';
 
 const { width } = Dimensions.get('window');
 const primaryColor = COLORS?.primary || '#FF6B47';
@@ -103,6 +106,94 @@ const ProfileIcon = ({ color }) => (
 export default function DashboardScreen({ navigation }) {
   const [firstName, setFirstName] = useState('User');
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [mqttClient, setMqttClient] = useState(null);
+  const [isMqttConnected, setIsMqttConnected] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [latestSensorByIdentifier, setLatestSensorByIdentifier] = useState({});
+
+  useEffect(() => {
+    const client = connectMqtt({
+      onConnect: async () => {
+        setIsMqttConnected(true);
+        try {
+          await subscribeTopic(client, MQTT_TOPICS.sensorData);
+          await subscribeTopic(client, MQTT_TOPICS.deviceLocation);
+          await subscribeTopic(client, MQTT_TOPICS.motionDetected);
+        } catch (error) {
+          console.error('MQTT subscribe error:', error);
+        }
+      },
+      onMessage: async (topic, message) => {
+        try {
+          const payload = JSON.parse(message);
+          const identifier = payload?.deviceId || payload?.identifier || payload?.device_id;
+          if (!identifier) return;
+
+          // Handle GPS / location data
+          if (topic === MQTT_TOPICS.deviceLocation) {
+            if (payload.lat != null && payload.lng != null) {
+              setLatestSensorByIdentifier((prev) => ({
+                ...prev,
+                [identifier]: { ...prev[identifier], lat: payload.lat, lng: payload.lng, heading: payload.heading },
+              }));
+
+              const { error } = await saveDeviceLocation({
+                deviceIdentifier: identifier,
+                lat: payload.lat,
+                lng: payload.lng,
+                heading: payload.heading ?? null,
+              });
+              if (error) console.error('Save location error:', error);
+            }
+            return;
+          }
+
+          // Handle motion detection data
+          if (topic === MQTT_TOPICS.motionDetected) {
+            if (payload.acc_peak != null) {
+              const { error } = await saveMotionLog({
+                deviceIdentifier: identifier,
+                accPeak: payload.acc_peak,
+              });
+              if (error) console.error('Save motion log error:', error);
+            }
+            return;
+          }
+
+          // Handle general sensor data (battery, online status, etc.)
+          if (topic === MQTT_TOPICS.sensorData) {
+            setLatestSensorByIdentifier((prev) => ({
+              ...prev,
+              [identifier]: { ...prev[identifier], ...payload },
+            }));
+
+            // Update battery_percentage in Supabase if present
+            if (payload.battery != null) {
+              // Find the device to get its Supabase ID
+              const matchedDevice = devices.find(d => d.identifier === identifier);
+              if (matchedDevice?.dbId) {
+                await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battery });
+              }
+            }
+          }
+        } catch (error) {
+          console.error('MQTT payload parse error:', error);
+        }
+      },
+      onError: (error) => {
+        console.error('MQTT connection error:', error);
+      },
+      onClose: () => {
+        setIsMqttConnected(false);
+      },
+    });
+
+    setMqttClient(client);
+
+    return () => {
+      disconnectMqtt(client);
+    };
+  }, [devices]);
 
   useFocusEffect(
     useCallback(() => {
@@ -110,6 +201,22 @@ export default function DashboardScreen({ navigation }) {
         try {
           const { session } = await getSession();
           if (session?.user?.id) {
+            const { devices: fetchedDevices } = await getUserDevices(session.user.id);
+            if (fetchedDevices?.length) {
+              setDevices(
+                fetchedDevices.map((item) => ({
+                  id: item.identifier || item.id,
+                  dbId: item.id,
+                  name: item.name,
+                  identifier: item.identifier,
+                  battery: item.battery_percentage || 0,
+                  isConnected: item.is_active ?? !!item.last_seen,
+                  isLocked: item.mode === 'locked',
+                  buzzerOn: item.buzzer_on || false,
+                }))
+              );
+            }
+
             const { profile } = await getProfile(session.user.id);
             if (profile?.full_name) {
               // Extract first name (first word of full name)
@@ -129,22 +236,37 @@ export default function DashboardScreen({ navigation }) {
     }, [])
   );
 
-  const devices = [
-    {
-      id: 'SPOT-1',
-      name: 'SPOT-1',
-      battery: 90,
-      isConnected: true,
-      isLocked: true,
-    },
-    {
-      id: 'SPOT-2',
-      name: 'SPOT-2',
-      battery: 60,
-      isConnected: false,
-      isLocked: false,
-    },
-  ];
+  const devicesToRender = devices.length
+    ? devices.map((device) => {
+        const liveData = latestSensorByIdentifier[device.identifier || device.id] || {};
+        return {
+          ...device,
+          battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
+          isConnected: !!liveData?.online || device.isConnected,
+          isLocked: typeof liveData?.isLocked === 'boolean' ? liveData.isLocked : device.isLocked,
+          latestTemp: liveData?.temperature,
+        };
+      })
+    : [];
+
+  const handleRingAlarm = async (device) => {
+    if (!mqttClient || !isMqttConnected) {
+      Alert.alert('MQTT Belum Terhubung', 'Pastikan koneksi MQTT aktif sebelum mengirim perintah buzzer.');
+      return;
+    }
+
+    try {
+      await publishJson(mqttClient, MQTT_TOPICS.buzzerControl, {
+        deviceId: device.identifier || device.id,
+        command: 'ON',
+        durationMs: 3000,
+      });
+
+      Alert.alert('Perintah Terkirim', `Buzzer untuk ${device.name} berhasil dipicu.`);
+    } catch (error) {
+      Alert.alert('Gagal Mengirim Perintah', error.message || 'Terjadi kesalahan saat publish MQTT.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -176,6 +298,7 @@ export default function DashboardScreen({ navigation }) {
         
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Perangkat Saya</Text>
+          <Text style={styles.connectionLabel}>{isMqttConnected ? 'MQTT Online' : 'MQTT Offline'}</Text>
           <TouchableOpacity 
             style={styles.iconBtn}
             onPress={() => navigation.navigate('Notification')}
@@ -187,7 +310,7 @@ export default function DashboardScreen({ navigation }) {
 
         {/* Device Cards Grid/List */}
         <View style={styles.deviceList}>
-          {devices.map((device) => {
+          {devicesToRender.map((device) => {
             const isConnected = device.isConnected;
             const statusColor = isConnected ? '#10B981' : '#EF4444';
             const statusBg = isConnected ? '#D1FAE5' : '#FEE2E2';
@@ -222,11 +345,16 @@ export default function DashboardScreen({ navigation }) {
                   </View>
                 </View>
 
+                {typeof device.latestTemp === 'number' && (
+                  <Text style={styles.liveTelemetryText}>Suhu terbaru: {device.latestTemp}°C</Text>
+                )}
+
                 {/* Bottom Row: Actions */}
                 <View style={styles.actionRow}>
                   <TouchableOpacity 
                     style={[styles.btnOutline, !isConnected && styles.btnOutlineDisabled]}
                     disabled={!isConnected}
+                    onPress={() => handleRingAlarm(device)}
                   >
                     <AlarmIcon color={isConnected ? primaryColor : '#9CA3AF'} />
                     <Text style={[styles.btnOutlineText, !isConnected && styles.btnOutlineTextDisabled]}>Ring Alarm</Text>
@@ -350,6 +478,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#111827',
   },
+  connectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginLeft: 'auto',
+    marginRight: 8,
+  },
   iconBtn: {
     padding: 8,
     backgroundColor: '#FFF',
@@ -445,6 +580,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#4B5563',
+  },
+  liveTelemetryText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 12,
   },
   actionRow: {
     flexDirection: 'row',

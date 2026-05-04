@@ -13,7 +13,7 @@ export default function SplashScreen({ onFinish } = {}) {
 
     // Geser angka 0.62 ini kalau zoom-nya masih kurang pas di tengah huruf 'O'
     // Kurangi (misal 0.58) kalau terlalu ke kanan, Tambah (misal 0.66) kalau terlalu ke kiri
-    const TARGET = { x: 0.82, y: 0.5 };
+    const TARGET = { x: 3, y: 0.5 };
     const offsetX = layout.width * (0.5 - TARGET.x);
     const offsetY = layout.height * (0.5 - TARGET.y);
 

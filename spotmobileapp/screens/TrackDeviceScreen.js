@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import MapView, { Marker } from 'react-native-maps';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { getSession, getUserDevices, getLatestDeviceLocation } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -113,25 +114,67 @@ const GoogleMapsUserDot = ({ size = 24 }) => (
 );
 
 export default function TrackDeviceScreen({ route, navigation }) {
-  const devices = [
-    { id: '1', name: 'SPOT-1', status: 'Connected', isConnected: true, lat: -6.8906, lng: 107.6105 },
-    { id: '2', name: 'SPOT-2', status: 'Disconnected', isConnected: false, lat: -6.8920, lng: 107.6120 },
-  ];
+  const [devices, setDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+
+  // Fetch devices and their latest locations on mount
+  useEffect(() => {
+    const fetchDevicesWithLocations = async () => {
+      try {
+        const { session } = await getSession();
+        if (!session?.user?.id) return;
+
+        const { devices: fetched } = await getUserDevices(session.user.id);
+        if (!fetched?.length) {
+          setDevices([]);
+          setLoadingDevices(false);
+          return;
+        }
+
+        // Fetch latest location for each device
+        const devicesWithLocations = await Promise.all(
+          fetched.map(async (d) => {
+            const { location } = await getLatestDeviceLocation(d.id);
+            return {
+              id: d.id,
+              name: d.name,
+              identifier: d.identifier,
+              status: d.is_active ? 'Connected' : 'Disconnected',
+              isConnected: d.is_active ?? !!d.last_seen,
+              lat: location?.lat ? Number(location.lat) : null,
+              lng: location?.lng ? Number(location.lng) : null,
+            };
+          })
+        );
+
+        setDevices(devicesWithLocations);
+      } catch (error) {
+        console.error('Failed to fetch devices with locations:', error);
+      } finally {
+        setLoadingDevices(false);
+      }
+    };
+
+    fetchDevicesWithLocations();
+  }, []);
 
   const focusDeviceName = route?.params?.focusDevice?.name;
   const targetDevice = focusDeviceName ? devices.find(d => d.name === focusDeviceName) : null;
 
-  const initialRegion = targetDevice ? {
-    latitude: targetDevice.lat - 0.0004, // Offset slightly so it's not hidden behind the bottom sheet
-    longitude: targetDevice.lng,
-    latitudeDelta: 0.001,
-    longitudeDelta: 0.001,
-  } : {
+  // Only use device location if available, otherwise fallback to default
+  const defaultRegion = {
     latitude: -6.8910,
     longitude: 107.6110,
     latitudeDelta: 0.01,
     longitudeDelta: 0.01,
   };
+
+  const initialRegion = targetDevice && targetDevice.lat != null ? {
+    latitude: targetDevice.lat - 0.0004,
+    longitude: targetDevice.lng,
+    latitudeDelta: 0.001,
+    longitudeDelta: 0.001,
+  } : defaultRegion;
 
   const mapRef = useRef(null);
 
@@ -230,7 +273,8 @@ export default function TrackDeviceScreen({ route, navigation }) {
         showsMyLocationButton={false} // Custom button used
         showsCompass={false}
       >
-        {devices.map((device) => {
+        {/* Device Markers - only show devices with valid locations */}
+        {devices.filter(d => d.lat != null && d.lng != null).map((device) => {
           const pulseAnim = new Animated.Value(0);
           
           if (device.isConnected) {
@@ -256,21 +300,21 @@ export default function TrackDeviceScreen({ route, navigation }) {
               coordinate={{ latitude: device.lat, longitude: device.lng }}
               title={device.name}
               description={device.status}
-              anchor={{ x: 0.5, y: 1 }} // anchor to bottom tip
+              anchor={{ x: 0.5, y: 1 }}
             >
               <View style={{ alignItems: 'center', justifyContent: 'flex-end', width: 80, height: 80 }}>
                 {device.isConnected && (
                   <Animated.View
                     style={{
                       position: 'absolute',
-                      top: 10, // Align center of pulse to the bulb of the pin
+                      top: 10,
                       width: 80,
                       height: 80,
                       borderRadius: 40,
                       backgroundColor: primaryColor,
                       opacity: pulseAnim.interpolate({
                         inputRange: [0, 0.2, 1],
-                        outputRange: [0, 0.4, 0], // fades out
+                        outputRange: [0, 0.4, 0],
                       }),
                       transform: [
                         {

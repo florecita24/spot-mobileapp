@@ -10,9 +10,11 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { getSession, createDeviceWithConnection } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const bgColor = '#F4F6F8';
@@ -77,10 +79,39 @@ export default function AddDeviceScreen({ navigation }) {
   const [isPassFocused, setIsPassFocused] = useState(false);
 
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    // Navigate back to Dashboard after saving
-    navigation.goBack();
+  const handleSave = async () => {
+    if (!deviceName || !deviceId || !ssid) {
+      Alert.alert('Data belum lengkap', 'Isi nama perangkat, ID perangkat, dan SSID terlebih dahulu.');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const { session } = await getSession();
+      if (!session?.user?.id) {
+        throw new Error('Sesi login tidak ditemukan. Silakan login ulang.');
+      }
+
+      const { error } = await createDeviceWithConnection({
+        ownerId: session.user.id,
+        name: deviceName,
+        identifier: deviceId,
+        ssid,
+        password,
+      });
+
+      if (error) throw error;
+
+      Alert.alert('Berhasil', 'Perangkat berhasil disimpan.');
+      navigation.goBack();
+    } catch (error) {
+      Alert.alert('Gagal menyimpan perangkat', error.message || 'Terjadi kesalahan.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -186,8 +217,8 @@ export default function AddDeviceScreen({ navigation }) {
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-            <Text style={styles.saveBtnText}>Simpan dan Hubungkan</Text>
+          <TouchableOpacity style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]} onPress={handleSave} activeOpacity={0.8} disabled={isSaving}>
+            <Text style={styles.saveBtnText}>{isSaving ? 'Menyimpan...' : 'Simpan dan Hubungkan'}</Text>
           </TouchableOpacity>
 
         </View>
@@ -336,6 +367,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
+  },
+  saveBtnDisabled: {
+    opacity: 0.7,
   },
   saveBtnText: {
     fontSize: 16,

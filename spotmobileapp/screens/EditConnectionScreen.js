@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Svg, Path, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { supabase } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const bgColor = '#F4F6F8';
@@ -59,18 +60,45 @@ const ChevronDownIcon = ({ color, size = 20, isExpanded }) => (
 );
 
 // --- Component ---
-export default function EditConnectionScreen({ navigation }) {
+export default function EditConnectionScreen({ navigation, route }) {
+  const device = route?.params?.device || {};
   const [ssid, setSsid] = useState('');
   const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [isSsidFocused, setIsSsidFocused] = useState(false);
   const [isPassFocused, setIsPassFocused] = useState(false);
 
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
 
-  const handleSave = () => {
-    // Navigate back to Device Detail after saving
-    navigation.goBack();
+  const handleSave = async () => {
+    if (!ssid.trim()) {
+      navigation.goBack();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const deviceId = device.dbId || device.id;
+      if (deviceId) {
+        // Upsert connection for this device
+        const { error } = await supabase
+          .from('connections')
+          .upsert(
+            { device_id: deviceId, ssid: ssid.trim(), password: password },
+            { onConflict: 'device_id' }
+          );
+
+        if (error) {
+          console.error('Save connection error:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Connection save error:', error);
+    } finally {
+      setSaving(false);
+      navigation.goBack();
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
   Platform,
 } from 'react-native';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
+import { getSession, getNotifications } from '../constants/supabase';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const bgColor = '#F4F6F8';
@@ -52,56 +54,54 @@ const CheckIcon = ({ color, size = 20 }) => (
   </Svg>
 );
 
-// --- Dummy Data ---
-const notifications = [
-  {
-    id: '1',
-    title: 'Ring Alarm Perangkat SPOT 1',
-    description: 'Ring Alarm Perangkat SPOT 1 dibunyikan sebanyak 5 kali hari ini',
-    time: '10:13',
-    type: 'alarm',
-  },
-  {
-    id: '2',
-    title: 'Terdeteksi Pergerakan pada SPOT 1',
-    description: 'Dideteksi pergerakan pada perangkat SPOT 1',
-    time: '10:00',
-    type: 'activity',
-  },
-  {
-    id: '3',
-    title: 'Mode Perangkat SPOT 1',
-    description: 'Mode Perangkat SPOT 1 berhasil diubah ke Mode Locked',
-    time: '09:40',
-    type: 'lock',
-  },
-  {
-    id: '4',
-    title: 'Berhasil Terhubung dengan Perangkat SPOT 1',
-    description: 'Perangkat SPOT 1 telah terhubung ke jaringan dan siap digunakan',
-    time: '09:35',
-    type: 'success',
-  },
-];
-
-// Helper for icon rendering based on type
-const getIconForType = (type) => {
-  switch (type) {
-    case 'alarm':
-      return { Icon: AlarmIcon, color: '#EF4444', bg: '#FEE2E2' };
-    case 'activity':
-      return { Icon: ActivityIcon, color: '#F59E0B', bg: '#FEF3C7' };
-    case 'lock':
-      return { Icon: LockIcon, color: primaryColor, bg: '#FFF0ED' };
-    case 'success':
-      return { Icon: CheckIcon, color: '#10B981', bg: '#D1FAE5' };
-    default:
-      return { Icon: ActivityIcon, color: '#6B7280', bg: '#F3F4F6' };
-  }
-};
-
 // --- Component ---
 export default function NotificationScreen({ navigation }) {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchNotifications = async () => {
+        try {
+          setLoading(true);
+          const { session } = await getSession();
+          if (session?.user?.id) {
+            const { notifications: fetched } = await getNotifications(session.user.id);
+            setNotifications(fetched);
+          }
+        } catch (error) {
+          console.error('Failed to fetch notifications:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchNotifications();
+    }, [])
+  );
+
+  // Determine icon type from notification data or title
+  const getTypeFromNotification = (notif) => {
+    // If data has a type field, use it
+    if (notif.data?.type) return notif.data.type;
+    // Fallback: infer from title keywords
+    const title = (notif.title || '').toLowerCase();
+    if (title.includes('alarm') || title.includes('buzzer')) return 'alarm';
+    if (title.includes('gerakan') || title.includes('motion') || title.includes('pergerakan')) return 'activity';
+    if (title.includes('mode') || title.includes('lock')) return 'lock';
+    if (title.includes('berhasil') || title.includes('terhubung') || title.includes('connected')) return 'success';
+    return 'default';
+  };
+
+  // Format timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const day = date.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}, ${hours}:${minutes}`;
+  };
   return (
     <View style={{ flex: 1, backgroundColor: bgColor }}>
       <SafeAreaView style={{ flex: 0, backgroundColor: primaryColor }} />
@@ -122,26 +122,44 @@ export default function NotificationScreen({ navigation }) {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
           <View style={styles.listContainer}>
-            {notifications.map((notif, index) => {
-              const { Icon, color, bg } = getIconForType(notif.type);
-              const isLast = index === notifications.length - 1;
-              
-              return (
-                <View key={notif.id} style={[styles.notificationCard, isLast && styles.lastCard]}>
-                  <View style={[styles.iconContainer, { backgroundColor: bg }]}>
-                    <Icon color={color} />
-                  </View>
-                  
-                  <View style={styles.contentContainer}>
-                    <View style={styles.titleRow}>
-                      <Text style={styles.title}>{notif.title}</Text>
+            {loading ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Memuat notifikasi...</Text>
+              </View>
+            ) : notifications.length === 0 ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Belum ada notifikasi.</Text>
+              </View>
+            ) : (
+              notifications.map((notif, index) => {
+                const type = getTypeFromNotification(notif);
+                const iconMap = {
+                  alarm: { Icon: AlarmIcon, color: '#EF4444', bg: '#FEE2E2' },
+                  activity: { Icon: ActivityIcon, color: '#F59E0B', bg: '#FEF3C7' },
+                  lock: { Icon: LockIcon, color: primaryColor, bg: '#FFF0ED' },
+                  success: { Icon: CheckIcon, color: '#10B981', bg: '#D1FAE5' },
+                  default: { Icon: ActivityIcon, color: '#6B7280', bg: '#F3F4F6' },
+                };
+                const { Icon, color, bg } = iconMap[type] || iconMap.default;
+                const isLast = index === notifications.length - 1;
+
+                return (
+                  <View key={notif.id} style={[styles.notificationCard, isLast && styles.lastCard]}>
+                    <View style={[styles.iconContainer, { backgroundColor: bg }]}>
+                      <Icon color={color} />
                     </View>
-                    <Text style={styles.description}>{notif.description}</Text>
-                    <Text style={styles.timeText}>{notif.time}</Text>
+
+                    <View style={styles.contentContainer}>
+                      <View style={styles.titleRow}>
+                        <Text style={styles.title}>{notif.title}</Text>
+                      </View>
+                      <Text style={styles.description}>{notif.body}</Text>
+                      <Text style={styles.timeText}>{formatTime(notif.created_at)}</Text>
+                    </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })
+            )}
           </View>
 
         </ScrollView>

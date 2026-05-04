@@ -122,6 +122,180 @@ export const updateProfile = async (userId, updates) => {
   }
 };
 
+// Device Functions
+export const createDeviceWithConnection = async ({
+  ownerId,
+  name,
+  identifier,
+  ssid,
+  password,
+}) => {
+  try {
+    const { data: device, error: deviceError } = await supabase
+      .from('devices')
+      .insert({
+        owner_id: ownerId,
+        name,
+        identifier,
+      })
+      .select('*')
+      .single();
+
+    if (deviceError) throw deviceError;
+
+    if (ssid) {
+      const { error: connError } = await supabase.from('connections').insert({
+        device_id: device.id,
+        ssid,
+        password,
+      });
+
+      if (connError) throw connError;
+    }
+
+    return { device, error: null };
+  } catch (error) {
+    return { device: null, error };
+  }
+};
+
+export const getUserDevices = async (ownerId) => {
+  try {
+    const { data, error } = await supabase
+      .from('devices')
+      .select('*')
+      .eq('owner_id', ownerId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { devices: data || [], error: null };
+  } catch (error) {
+    return { devices: [], error };
+  }
+};
+
+// Device Location Functions (device_locations table)
+export const saveDeviceLocation = async ({ deviceIdentifier, lat, lng, heading }) => {
+  try {
+    const { data: device, error: deviceError } = await supabase
+      .from('devices')
+      .select('id')
+      .eq('identifier', deviceIdentifier)
+      .single();
+
+    if (deviceError) throw deviceError;
+
+    const { data, error } = await supabase
+      .from('device_locations')
+      .insert({
+        device_id: device.id,
+        lat,
+        lng,
+        heading: heading ?? null,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return { location: data, error: null };
+  } catch (error) {
+    return { location: null, error };
+  }
+};
+
+export const getLatestDeviceLocation = async (deviceId) => {
+  try {
+    const { data, error } = await supabase
+      .from('device_locations')
+      .select('*')
+      .eq('device_id', deviceId)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return { location: data || null, error: null };
+  } catch (error) {
+    return { location: null, error };
+  }
+};
+
+export const getDeviceLocations = async (deviceId, limit = 20) => {
+  try {
+    const { data, error } = await supabase
+      .from('device_locations')
+      .select('*')
+      .eq('device_id', deviceId)
+      .order('recorded_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return { locations: data || [], error: null };
+  } catch (error) {
+    return { locations: [], error };
+  }
+};
+
+// Motion Logs Functions (motion_logs table)
+export const saveMotionLog = async ({ deviceIdentifier, accPeak }) => {
+  try {
+    const { data: device, error: deviceError } = await supabase
+      .from('devices')
+      .select('id')
+      .eq('identifier', deviceIdentifier)
+      .single();
+
+    if (deviceError) throw deviceError;
+
+    const { data, error } = await supabase
+      .from('motion_logs')
+      .insert({
+        device_id: device.id,
+        acc_peak: accPeak,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return { log: data, error: null };
+  } catch (error) {
+    return { log: null, error };
+  }
+};
+
+// Notification Functions (notifications table)
+export const getNotifications = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return { notifications: data || [], error: null };
+  } catch (error) {
+    return { notifications: [], error };
+  }
+};
+
+// Update Device Fields (mode, buzzer_on, battery_percentage, is_active, etc.)
+export const updateDevice = async (deviceId, updates) => {
+  try {
+    const { data, error } = await supabase
+      .from('devices')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', deviceId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { device: data, error: null };
+  } catch (error) {
+    return { device: null, error };
+  }
+};
+
 export const changePassword = async (oldPassword, newPassword) => {
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser();

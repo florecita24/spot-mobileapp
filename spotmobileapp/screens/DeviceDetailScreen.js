@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
+import { updateDevice } from '../constants/supabase';
+import { MQTT_TOPICS } from '../constants/mqtt';
+import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt } from '../services/mqttService';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -97,10 +100,12 @@ export default function DeviceDetailScreen({ navigation, route }) {
   // Use passed params or fallback to mock data
   const device = route?.params?.device || {
     id: 'SPOT-1',
+    dbId: null,
     name: 'SPOT-1',
-    battery: 90,
-    isConnected: true,
+    battery: 0,
+    isConnected: false,
     isLocked: true,
+    buzzerOn: false,
   };
 
   const [isLocked, setIsLocked] = useState(device.isLocked);
@@ -111,10 +116,14 @@ export default function DeviceDetailScreen({ navigation, route }) {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameInput, setRenameInput] = useState(device.name);
 
-  const handleRenameDevice = () => {
+  const handleRenameDevice = async () => {
     if (renameInput.trim()) {
       setDeviceName(renameInput.trim());
       setRenameModalVisible(false);
+      // Persist to Supabase
+      if (device.dbId) {
+        await updateDevice(device.dbId, { name: renameInput.trim() });
+      }
     }
   };
 
@@ -151,7 +160,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
   const [trackWidth, setTrackWidth] = useState(0);
   const toggleAnim = useRef(new Animated.Value(device.isLocked ? 1 : 0)).current;
 
-  const toggleMode = () => {
+  const toggleMode = async () => {
     const newValue = !isLocked;
     setIsLocked(newValue);
     Animated.timing(toggleAnim, {
@@ -159,6 +168,27 @@ export default function DeviceDetailScreen({ navigation, route }) {
       duration: 300,
       useNativeDriver: false,
     }).start();
+
+    // Persist mode to Supabase
+    const newMode = newValue ? 'locked' : 'unlocked';
+    if (device.dbId) {
+      await updateDevice(device.dbId, { mode: newMode });
+    }
+
+    // Publish mode change via MQTT
+    try {
+      const tempClient = connectMqtt({
+        onConnect: async () => {
+          await publishJson(tempClient, MQTT_TOPICS.modeControl, {
+            deviceId: device.identifier || device.id,
+            mode: newMode,
+          });
+          setTimeout(() => disconnectMqtt(tempClient), 1000);
+        },
+      });
+    } catch (err) {
+      console.error('MQTT mode publish error:', err);
+    }
   };
 
   const thumbTranslateX = toggleAnim.interpolate({
@@ -239,7 +269,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
           <View style={styles.actionGroupRow}>
             <TouchableOpacity 
               style={styles.btnOutline}
-              onPress={() => navigation.navigate('EditConnection')}
+              onPress={() => navigation.navigate('EditConnection', { device })}
             >
               <Text style={styles.btnOutlineText}>Ubah Koneksi</Text>
             </TouchableOpacity>
