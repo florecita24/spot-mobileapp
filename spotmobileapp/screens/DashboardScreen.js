@@ -238,15 +238,15 @@ export default function DashboardScreen({ navigation }) {
 
   const devicesToRender = devices.length
     ? devices.map((device) => {
-        const liveData = latestSensorByIdentifier[device.identifier || device.id] || {};
-        return {
-          ...device,
-          battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
-          isConnected: !!liveData?.online || device.isConnected,
-          isLocked: typeof liveData?.isLocked === 'boolean' ? liveData.isLocked : device.isLocked,
-          latestTemp: liveData?.temperature,
-        };
-      })
+      const liveData = latestSensorByIdentifier[device.identifier || device.id] || {};
+      return {
+        ...device,
+        battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
+        isConnected: !!liveData?.online || device.isConnected,
+        isLocked: typeof liveData?.isLocked === 'boolean' ? liveData.isLocked : device.isLocked,
+        latestTemp: liveData?.temperature,
+      };
+    })
     : [];
 
   const handleRingAlarm = async (device) => {
@@ -256,12 +256,7 @@ export default function DashboardScreen({ navigation }) {
     }
 
     try {
-      await publishJson(mqttClient, MQTT_TOPICS.buzzerControl, {
-        deviceId: device.identifier || device.id,
-        command: 'ON',
-        durationMs: 3000,
-      });
-
+      mqttClient.publish(MQTT_TOPICS.buzzerControl, 'ON');
       Alert.alert('Perintah Terkirim', `Buzzer untuk ${device.name} berhasil dipicu.`);
     } catch (error) {
       Alert.alert('Gagal Mengirim Perintah', error.message || 'Terjadi kesalahan saat publish MQTT.');
@@ -271,7 +266,7 @@ export default function DashboardScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={bgColor} />
-      
+
       {/* Sleek Header */}
       <View style={styles.header}>
         <View style={styles.headerTextGroup}>
@@ -295,11 +290,11 @@ export default function DashboardScreen({ navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Perangkat Saya</Text>
           <Text style={styles.connectionLabel}>{isMqttConnected ? 'MQTT Online' : 'MQTT Offline'}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.iconBtn}
             onPress={() => navigation.navigate('Notification')}
           >
@@ -317,7 +312,7 @@ export default function DashboardScreen({ navigation }) {
 
             return (
               <View key={device.id} style={styles.card}>
-                
+
                 {/* Top Row: Icon & Status */}
                 <View style={styles.cardHeader}>
                   <View style={[styles.deviceIconWrapper, { backgroundColor: isConnected ? primaryLight : '#F3F4F6' }]}>
@@ -333,7 +328,7 @@ export default function DashboardScreen({ navigation }) {
 
                 {/* Middle Row: Name & Quick Stats */}
                 <Text style={styles.deviceName}>{device.name}</Text>
-                
+
                 <View style={styles.statsRow}>
                   <View style={styles.statPill}>
                     <BatteryIcon level={device.battery} color={device.battery > 20 ? '#10B981' : '#EF4444'} />
@@ -351,7 +346,7 @@ export default function DashboardScreen({ navigation }) {
 
                 {/* Bottom Row: Actions */}
                 <View style={styles.actionRow}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.btnOutline, !isConnected && styles.btnOutlineDisabled]}
                     disabled={!isConnected}
                     onPress={() => handleRingAlarm(device)}
@@ -359,22 +354,22 @@ export default function DashboardScreen({ navigation }) {
                     <AlarmIcon color={isConnected ? primaryColor : '#9CA3AF'} />
                     <Text style={[styles.btnOutlineText, !isConnected && styles.btnOutlineTextDisabled]}>Ring Alarm</Text>
                   </TouchableOpacity>
-                  
-                  <TouchableOpacity 
+
+                  <TouchableOpacity
                     style={styles.btnSolid}
                     onPress={() => navigation.navigate('DeviceDetail', { device })}
                   >
                     <Text style={styles.btnSolidText}>Detail</Text>
                   </TouchableOpacity>
                 </View>
-                
+
               </View>
             );
           })}
         </View>
 
         {/* Add Device Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addDeviceCard}
           onPress={() => navigation.navigate('AddDevice')}
         >
@@ -391,14 +386,14 @@ export default function DashboardScreen({ navigation }) {
             <HomeIcon color={primaryColor} />
             <Text style={[styles.navText, { color: primaryColor }]}>Beranda</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navItem}
             onPress={() => navigation.navigate('TrackDevice')}
           >
             <TargetIcon color="#9CA3AF" />
             <Text style={styles.navText}>Lacak</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navItem}
             onPress={() => navigation.navigate('Profile')}
           >
