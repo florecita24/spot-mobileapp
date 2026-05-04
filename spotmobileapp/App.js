@@ -28,27 +28,29 @@ export default function App() {
     const { session } = await getSession();
     
     if (session) {
-      // Check if profile still exists (in case table was dropped)
-      const { error } = await getProfile(session.user.id);
-      if (error) {
-        // Profile not found, sign out to clear local session
+      // Cek apakah data profil benar-benar ada dan tidak ada error
+      const { data, error } = await getProfile(session.user.id);
+      
+      if (error || !data) {
+        // Profil tidak ditemukan (misal karena drop table), hapus sesi
         await signOut();
         setUserSession(null);
       } else {
+        // Sesi dan data profil valid
         setUserSession(session);
       }
     } else {
+      // Tidak ada sesi yang aktif
       setUserSession(null);
     }
     
-    // Splash screen duration: 2 seconds
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
+    // Perhatikan: setTimeout 2 detik sudah DIHAPUS dari sini
+    // agar SplashScreen.js yang mengambil alih kapan loading selesai.
   };
 
+  // Kirimkan fungsi untuk mengubah isLoading ke SplashScreen
   if (isLoading) {
-    return <SplashScreen />;
+    return <SplashScreen onFinish={() => setIsLoading(false)} />;
   }
 
   return (
@@ -78,51 +80,37 @@ export default function App() {
         <Stack.Screen
           name="DeviceDetail"
           component={DeviceDetailScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="AddDevice"
           component={AddDeviceScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="EditConnection"
           component={EditConnectionScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="Notification"
           component={NotificationScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="TrackDevice"
           component={TrackDeviceScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="Profile"
           component={ProfileScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
         <Stack.Screen
           name="EditProfile"
           component={EditProfileScreen}
-          options={{
-            animation: 'fade',
-          }}
+          options={{ animation: 'fade' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
