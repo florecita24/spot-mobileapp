@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "spotmobileapp",
-    "slug": "spotmobileapp",
+    "name": "SPOT",
+    "slug": "spot-mobileapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/App-Logo.png",
@@ -20,10 +20,16 @@
         "foregroundImage": "./assets/App-Logo.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.florecita.spot"
     },
     "web": {
       "favicon": "./assets/App-Logo.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d0230ecd-9708-4ec2-8a10-871ae5f02fa0"
+      }
     }
   }
 }
