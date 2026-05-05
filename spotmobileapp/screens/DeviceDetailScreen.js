@@ -12,12 +12,13 @@ import {
   Modal,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
 import { updateDevice } from '../constants/supabase';
 import { MQTT_TOPICS } from '../constants/mqtt';
-import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt } from '../services/mqttService';
+import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt, publishText, getActiveMqttClient } from '../services/mqttService';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -169,25 +170,41 @@ export default function DeviceDetailScreen({ navigation, route }) {
       useNativeDriver: false,
     }).start();
 
-    // Persist mode to Supabase
     const newMode = newValue ? 'locked' : 'unlocked';
     if (device.dbId) {
       await updateDevice(device.dbId, { mode: newMode });
     }
 
-    // Publish mode change via MQTT
+    // Gunakan koneksi yang sama dari Dashboard
+    const client = getActiveMqttClient();
+    if (client && client.isConnected()) {
+      try {
+        await publishJson(client, MQTT_TOPICS.modeControl, {
+          deviceId: device.identifier || device.id,
+          mode: newMode,
+        });
+      } catch (err) {
+        console.error('MQTT mode publish error:', err);
+      }
+    }
+  };
+
+  // Fungsi untuk membunyikan alarm
+  const handleRingAlarm = async () => {
+    // Ambil koneksi yang sudah dibuat oleh Dashboard
+    const client = getActiveMqttClient();
+
+    if (!client || !client.isConnected()) {
+      Alert.alert('Perangkat Disconnected', 'Pastikan koneksi MQTT aktif di Dashboard terlebih dahulu.');
+      return;
+    }
+
     try {
-      const tempClient = connectMqtt({
-        onConnect: async () => {
-          await publishJson(tempClient, MQTT_TOPICS.modeControl, {
-            deviceId: device.identifier || device.id,
-            mode: newMode,
-          });
-          setTimeout(() => disconnectMqtt(tempClient), 1000);
-        },
-      });
-    } catch (err) {
-      console.error('MQTT mode publish error:', err);
+      await publishText(client, MQTT_TOPICS.buzzerControl, 'ON');
+      Alert.alert('Perintah Terkirim', `Buzzer untuk ${deviceName} berhasil dipicu.`);
+    } catch (error) {
+      console.error('MQTT alarm publish error:', error);
+      Alert.alert('Gagal Mengirim Perintah', error.message || 'Terjadi kesalahan saat publish MQTT.');
     }
   };
 
@@ -317,6 +334,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
               <TouchableOpacity 
                 style={[styles.btnOutlinePill, !isConnected && styles.btnOutlineDisabled]}
                 disabled={!isConnected}
+                onPress={handleRingAlarm}
               >
                 <AlarmIcon color={isConnected ? primaryColor : '#9CA3AF'} />
                 <Text style={[styles.btnOutlineText, !isConnected && styles.btnOutlineTextDisabled]}>Ring Alarm</Text>

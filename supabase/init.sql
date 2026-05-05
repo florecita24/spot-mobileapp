@@ -230,7 +230,40 @@ create policy "notification_delete" on notifications for delete using (
 );
 
 -- ============================================
--- 6. STORAGE: AVATARS BUCKET
+-- 6. SENSOR_READINGS TABLE (MQTT INGESTION)
+-- ============================================
+create table if not exists sensor_readings (
+  id uuid primary key default gen_random_uuid(),
+  device_id uuid not null references devices(id) on delete cascade,
+  topic text not null,
+  payload jsonb not null,
+  temperature numeric,
+  humidity numeric,
+  battery numeric,
+  lat numeric,
+  lng numeric,
+  recorded_at timestamptz default (now() at time zone 'Asia/Jakarta'),
+  created_at timestamptz default (now() at time zone 'Asia/Jakarta')
+);
+
+create index if not exists sensor_readings_device_recorded_idx on sensor_readings(device_id, recorded_at desc);
+
+alter table sensor_readings enable row level security;
+
+create policy "sensor_read" on sensor_readings for select using (
+  exists (
+    select 1 from devices d where d.id = sensor_readings.device_id and d.owner_id = auth.uid()
+  )
+);
+
+create policy "sensor_insert" on sensor_readings for insert with check (
+  exists (
+    select 1 from devices d where d.id = sensor_readings.device_id and d.owner_id = auth.uid()
+  )
+);
+
+-- ============================================
+-- 7. STORAGE: AVATARS BUCKET
 -- ============================================
 -- Create avatars bucket (run this in Supabase Dashboard if needed)
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true);

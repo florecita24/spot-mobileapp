@@ -119,12 +119,33 @@ export default function DashboardScreen({ navigation }) {
           await subscribeTopic(client, MQTT_TOPICS.sensorData);
           await subscribeTopic(client, MQTT_TOPICS.deviceLocation);
           await subscribeTopic(client, MQTT_TOPICS.motionDetected);
+          await subscribeTopic(client, 'esp32/status');
         } catch (error) {
           console.error('MQTT subscribe error:', error);
         }
       },
       onMessage: async (topic, message) => {
         try {
+          // --- TAMBAHKAN BLOK INI ---
+          // 1. Tangkap pesan LWT / Status Terlebih Dahulu (Bukan JSON)
+          if (topic === 'esp32/status') {
+            // Asumsikan semua alat pakai status ini (jika kamu punya banyak alat, nanti ESP32 harus kirim ID-nya juga)
+            // Untuk sekarang, kita paksakan alat pertama di daftar kita yang berubah statusnya
+            if (devices.length > 0) {
+              const firstDeviceIdentifier = devices[0].identifier || devices[0].id;
+
+              setLatestSensorByIdentifier((prev) => ({
+                ...prev,
+                [firstDeviceIdentifier]: {
+                  ...prev[firstDeviceIdentifier],
+                  online: message === 'ONLINE' // Jika ONLINE = true, jika OFFLINE = false
+                },
+              }));
+              console.log("Status MQTT alat berubah:", message);
+            }
+            return; // Stop eksekusi di sini, karena pesan ini bukan JSON
+          }
+
           const payload = JSON.parse(message);
           const identifier = payload?.deviceId || payload?.identifier || payload?.device_id;
           if (!identifier) return;
@@ -164,7 +185,7 @@ export default function DashboardScreen({ navigation }) {
           if (topic === MQTT_TOPICS.sensorData) {
             setLatestSensorByIdentifier((prev) => ({
               ...prev,
-              [identifier]: { ...prev[identifier], ...payload },
+              [identifier]: { ...prev[identifier], ...payload, online: true },
             }));
 
             // Update battery_percentage in Supabase if present
@@ -193,7 +214,7 @@ export default function DashboardScreen({ navigation }) {
     return () => {
       disconnectMqtt(client);
     };
-  }, [devices]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -210,7 +231,7 @@ export default function DashboardScreen({ navigation }) {
                   name: item.name,
                   identifier: item.identifier,
                   battery: item.battery_percentage || 0,
-                  isConnected: item.is_active ?? !!item.last_seen,
+                  isConnected: false,
                   isLocked: item.mode === 'locked',
                   buzzerOn: item.buzzer_on || false,
                 }))
@@ -242,7 +263,9 @@ export default function DashboardScreen({ navigation }) {
       return {
         ...device,
         battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
-        isConnected: !!liveData?.online || device.isConnected,
+
+        isConnected: liveData.online === true,
+
         isLocked: typeof liveData?.isLocked === 'boolean' ? liveData.isLocked : device.isLocked,
         latestTemp: liveData?.temperature,
       };

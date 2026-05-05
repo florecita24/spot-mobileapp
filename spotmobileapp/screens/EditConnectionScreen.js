@@ -44,14 +44,14 @@ const LockIcon = ({ color, size = 20 }) => (
 );
 
 const ChevronDownIcon = ({ color, size = 20, isExpanded }) => (
-  <Svg 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke={color} 
-    strokeWidth={2.5} 
-    strokeLinecap="round" 
+  <Svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth={2.5}
+    strokeLinecap="round"
     strokeLinejoin="round"
     style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
   >
@@ -81,16 +81,32 @@ export default function EditConnectionScreen({ navigation, route }) {
     try {
       const deviceId = device.dbId || device.id;
       if (deviceId) {
-        // Upsert connection for this device
-        const { error } = await supabase
+        // 1. Cek apakah koneksi untuk device ini sudah ada di database
+        const { data: existingConnection } = await supabase
           .from('connections')
-          .upsert(
-            { device_id: deviceId, ssid: ssid.trim(), password: password },
-            { onConflict: 'device_id' }
-          );
+          .select('id')
+          .eq('device_id', deviceId)
+          .single(); // Ambil satu baris saja
 
-        if (error) {
-          console.error('Save connection error:', error);
+        let dbError = null;
+
+        if (existingConnection) {
+          // 2. Jika sudah ada, lakukan UPDATE
+          const { error } = await supabase
+            .from('connections')
+            .update({ ssid: ssid.trim(), password: password })
+            .eq('device_id', deviceId);
+          dbError = error;
+        } else {
+          // 3. Jika belum ada, lakukan INSERT baru
+          const { error } = await supabase
+            .from('connections')
+            .insert({ device_id: deviceId, ssid: ssid.trim(), password: password });
+          dbError = error;
+        }
+
+        if (dbError) {
+          console.error('Save connection error:', dbError);
         }
       }
     } catch (error) {
@@ -105,12 +121,12 @@ export default function EditConnectionScreen({ navigation, route }) {
     <View style={{ flex: 1, backgroundColor: bgColor }}>
       <SafeAreaView style={{ flex: 0, backgroundColor: primaryColor }} />
       <SafeAreaView style={styles.innerContainer}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <StatusBar barStyle="light-content" backgroundColor={primaryColor} />
-          
+
           {/* Modern Top Header Colored Block */}
           <View style={styles.headerBackground}>
             <View style={styles.header}>
@@ -123,10 +139,10 @@ export default function EditConnectionScreen({ navigation, route }) {
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            
+
             {/* Form Card */}
             <View style={styles.card}>
-              
+
               {/* SSID Input */}
               <View style={styles.inputGroup}>
                 <View style={styles.labelRow}>
@@ -175,8 +191,8 @@ export default function EditConnectionScreen({ navigation, route }) {
 
             {/* Instructions Accordion */}
             <View style={styles.accordionCard}>
-              <TouchableOpacity 
-                style={styles.accordionHeader} 
+              <TouchableOpacity
+                style={styles.accordionHeader}
                 activeOpacity={0.7}
                 onPress={() => setIsAccordionOpen(!isAccordionOpen)}
               >

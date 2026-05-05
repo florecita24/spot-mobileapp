@@ -1,6 +1,7 @@
 import Paho from 'paho-mqtt';
 import { MQTT_CONFIG } from '../constants/mqtt';
 
+let activeMqttClient = null;
 // FIX KHUSUS REACT NATIVE: Paho kadang mencari localStorage (bawaan browser). 
 // Kita akali dengan membuat storage bohongan agar tidak error di HP.
 if (!global.localStorage) {
@@ -22,6 +23,8 @@ export const connectMqtt = ({ onConnect, onMessage, onError, onClose } = {}) => 
     MQTT_CONFIG.path,
     clientId
   );
+
+  activeMqttClient = client;
 
   // Event: Saat koneksi terputus
   client.onConnectionLost = (responseObject) => {
@@ -103,4 +106,30 @@ export const disconnectMqtt = (client) => {
       console.log("Abaikan error disconnect:", err);
     }
   }
+};
+
+export const publishText = (client, topic, payload) => {
+  return new Promise((resolve, reject) => {
+    // Cek apakah client ada dan sedang terhubung
+    if (!client || !client.isConnected()) {
+      return reject(new Error('MQTT client belum terhubung'));
+    }
+
+    try {
+      // Untuk publishText, kita langsung jadikan payload sebagai message (bukan JSON)
+      const message = new Paho.Message(payload);
+      
+      message.destinationName = topic;
+      message.qos = 1;
+      
+      client.send(message);
+      resolve(true);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
+export const getActiveMqttClient = () => {
+  return activeMqttClient;
 };
