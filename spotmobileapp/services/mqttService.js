@@ -16,11 +16,9 @@ export const connectMqtt = ({ onConnect, onMessage, onError, onClose } = {}) => 
   // Bikin Client ID unik agar tidak diblokir oleh HiveMQ
   const clientId = `spot_mobile_${Math.random().toString(16).substring(2, 10)}`;
 
-  // Inisialisasi Paho Client (Host, Port, Path, ClientID)
+  // Inisialisasi Paho Client menggunakan full URI wss://
   const client = new Paho.Client(
-    MQTT_CONFIG.host,
-    Number(MQTT_CONFIG.port),
-    MQTT_CONFIG.path,
+    `wss://${MQTT_CONFIG.host}:${MQTT_CONFIG.port}${MQTT_CONFIG.path}`,
     clientId
   );
 

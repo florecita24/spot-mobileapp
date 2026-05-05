@@ -95,12 +95,17 @@ export default function NotificationScreen({ navigation }) {
   // Format timestamp
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
-    const date = new Date(timestamp);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const day = date.getDate();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}, ${hours}:${minutes}`;
+    try {
+      const datePart = timestamp.split('T')[0];
+      const timePart = timestamp.split('T')[1].split('+')[0].split('.')[0];
+      const [year, monthStr, day] = datePart.split('-');
+      const [hours, minutes] = timePart.split(':');
+      
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return `${parseInt(day, 10)} ${months[parseInt(monthStr, 10) - 1]} ${year}, ${hours}:${minutes} WIB`;
+    } catch (error) {
+      return timestamp;
+    }
   };
   return (
     <View style={{ flex: 1, backgroundColor: bgColor }}>
@@ -126,39 +131,59 @@ export default function NotificationScreen({ navigation }) {
               <View style={{ padding: 40, alignItems: 'center' }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Memuat notifikasi...</Text>
               </View>
-            ) : notifications.length === 0 ? (
-              <View style={{ padding: 40, alignItems: 'center' }}>
-                <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Belum ada notifikasi.</Text>
-              </View>
             ) : (
-              notifications.map((notif, index) => {
-                const type = getTypeFromNotification(notif);
-                const iconMap = {
-                  alarm: { Icon: AlarmIcon, color: '#EF4444', bg: '#FEE2E2' },
-                  activity: { Icon: ActivityIcon, color: '#F59E0B', bg: '#FEF3C7' },
-                  lock: { Icon: LockIcon, color: primaryColor, bg: '#FFF0ED' },
-                  success: { Icon: CheckIcon, color: '#10B981', bg: '#D1FAE5' },
-                  default: { Icon: ActivityIcon, color: '#6B7280', bg: '#F3F4F6' },
-                };
-                const { Icon, color, bg } = iconMap[type] || iconMap.default;
-                const isLast = index === notifications.length - 1;
+              (() => {
+                const filteredNotifications = notifications.filter(notif => {
+                  const type = getTypeFromNotification(notif);
+                  const title = (notif.title || '').toLowerCase();
+                  const body = (notif.body || '').toLowerCase();
+                  
+                  // Filter hanya untuk:
+                  // 1. Pergerakan mencurigakan (biasanya tipe 'activity' atau ada kata gerakan di judul/body)
+                  // 2. Perangkat terputus (ada kata 'terputus' di judul atau body)
+                  const isDisconnect = title.includes('terputus') || body.includes('terputus') || body.includes('diputuskan');
+                  const isActivity = type === 'activity' || title.includes('gerakan') || title.includes('pergerakan') || body.includes('gerakan');
+                  
+                  return isActivity || isDisconnect;
+                });
 
-                return (
-                  <View key={notif.id} style={[styles.notificationCard, isLast && styles.lastCard]}>
-                    <View style={[styles.iconContainer, { backgroundColor: bg }]}>
-                      <Icon color={color} />
+                if (filteredNotifications.length === 0) {
+                  return (
+                    <View style={{ padding: 40, alignItems: 'center' }}>
+                      <Text style={{ color: '#9CA3AF', fontSize: 14 }}>Belum ada notifikasi.</Text>
                     </View>
+                  );
+                }
 
-                    <View style={styles.contentContainer}>
-                      <View style={styles.titleRow}>
-                        <Text style={styles.title}>{notif.title}</Text>
+                return filteredNotifications.map((notif, index) => {
+                  const type = getTypeFromNotification(notif);
+                  const iconMap = {
+                    alarm: { Icon: AlarmIcon, color: '#EF4444', bg: '#FEE2E2' },
+                    activity: { Icon: ActivityIcon, color: '#F59E0B', bg: '#FEF3C7' },
+                    lock: { Icon: LockIcon, color: primaryColor, bg: '#FFF0ED' },
+                    success: { Icon: CheckIcon, color: '#10B981', bg: '#D1FAE5' },
+                    default: { Icon: ActivityIcon, color: '#6B7280', bg: '#F3F4F6' },
+                  };
+                  const { Icon, color, bg } = iconMap[type] || iconMap.default;
+                  const isLast = index === filteredNotifications.length - 1;
+
+                  return (
+                    <View key={notif.id} style={[styles.notificationCard, isLast && styles.lastCard]}>
+                      <View style={[styles.iconContainer, { backgroundColor: bg }]}>
+                        <Icon color={color} />
                       </View>
-                      <Text style={styles.description}>{notif.body}</Text>
-                      <Text style={styles.timeText}>{formatTime(notif.created_at)}</Text>
+
+                      <View style={styles.contentContainer}>
+                        <View style={styles.titleRow}>
+                          <Text style={styles.title}>{notif.title}</Text>
+                        </View>
+                        <Text style={styles.description}>{notif.body}</Text>
+                        <Text style={styles.timeText}>{formatTime(notif.created_at)}</Text>
+                      </View>
                     </View>
-                  </View>
-                );
-              })
+                  );
+                });
+              })()
             )}
           </View>
 

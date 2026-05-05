@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
-import { updateDevice } from '../constants/supabase';
+import { useFocusEffect } from '@react-navigation/native';
+import { getSession, updateDevice, saveNotification, getDeviceNotifications } from '../constants/supabase';
 import { MQTT_TOPICS } from '../constants/mqtt';
 import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt, publishText, getActiveMqttClient } from '../services/mqttService';
 
@@ -117,6 +118,53 @@ export default function DeviceDetailScreen({ navigation, route }) {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameInput, setRenameInput] = useState(device.name);
 
+  // State untuk Real Logs
+  const [deviceLogs, setDeviceLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+
+  const fetchLogs = async (isBackground = false) => {
+    if (!device.dbId) return;
+    try {
+      if (!isBackground) setLoadingLogs(true);
+      const { logs, error } = await getDeviceNotifications(device.dbId);
+      if (error) {
+        console.error('getDeviceNotifications error:', error);
+      }
+      setDeviceLogs(logs || []);
+    } catch (err) {
+      console.error('Error fetching logs', err);
+    } finally {
+      if (!isBackground) setLoadingLogs(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchLogs();
+      const intervalId = setInterval(() => {
+        fetchLogs(true); // refresh silently
+      }, 3000);
+      return () => clearInterval(intervalId);
+    }, [device.dbId])
+  );
+
+  const formatLogTime = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      // Ambil timestamp persis seperti di database tanpa konversi zona waktu
+      const datePart = timestamp.split('T')[0];
+      const timePart = timestamp.split('T')[1].split('+')[0].split('.')[0];
+      
+      const [year, monthStr, day] = datePart.split('-');
+      const [hours, minutes, seconds] = timePart.split(':');
+      
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return `${parseInt(day, 10)} ${months[parseInt(monthStr, 10) - 1]} ${year}, ${hours}:${minutes}:${seconds || '00'} WIB`;
+    } catch (e) {
+      return timestamp;
+    }
+  };
+
   const handleRenameDevice = async () => {
     if (renameInput.trim()) {
       setDeviceName(renameInput.trim());
@@ -132,28 +180,48 @@ export default function DeviceDetailScreen({ navigation, route }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('idle'); // 'connecting', 'success', 'failed'
 
-  const handleToggleConnection = () => {
+  const handleToggleConnection = async () => {
     if (isConnected) {
       // Direct disconnect for now
       setIsConnected(false);
+      // Simpan status unpair ke Supabase
+      if (device.dbId) {
+        await updateDevice(device.dbId, { is_active: false });
+      }
     } else {
       // Simulate Connection
       setConnectionStatus('connecting');
       setModalVisible(true);
 
-      // Simulate API call delay (2 seconds)
-      setTimeout(() => {
-        // Randomize success/fail for testing purposes (50% chance)
-        const isSuccess = Math.random() > 0.5;
-
-        if (isSuccess) {
-          setConnectionStatus('success');
-          setIsConnected(true);
-        } else {
-          setConnectionStatus('failed');
-          setIsConnected(false);
+      // Simulate API call delay (1 second)
+      setTimeout(async () => {
+        setConnectionStatus('success');
+        setIsConnected(true);
+        
+        // Simpan status paired ke Supabase
+        if (device.dbId) {
+          await updateDevice(device.dbId, { is_active: true });
         }
-      }, 2000);
+
+        // Notifikasi berhasil terhubung
+        const { session } = await getSession();
+        if (session?.user?.id) {
+          const { error } = await saveNotification({
+            userId: session.user.id,
+            deviceId: device.dbId,
+            title: `Berhasil Terhubung dengan Perangkat ${deviceName}`,
+            body: `Perangkat ${deviceName} telah terhubung ke jaringan dan siap digunakan`,
+            data: { type: 'success' }
+          });
+          if (error) {
+            console.error('Error saving connect notif:', error);
+            Alert.alert('Gagal', error.message || 'Gagal menyimpan riwayat terhubung.');
+          }
+          fetchLogs(); // Refresh log
+        } else {
+          Alert.alert('Debug', 'Sesi tidak ditemukan saat mencoba menyimpan log.');
+        }
+      }, 1000);
     }
   };
 
@@ -190,6 +258,23 @@ export default function DeviceDetailScreen({ navigation, route }) {
           1,
           true
         );
+        
+        // Notifikasi mode diubah
+        const { session } = await getSession();
+        if (session?.user?.id) {
+          const { error } = await saveNotification({
+            userId: session.user.id,
+            deviceId: device.dbId,
+            title: `Mode Perangkat ${deviceName}`,
+            body: `Mode Perangkat ${deviceName} berhasil diubah ke Mode ${newMode}`,
+            data: { type: 'lock' }
+          });
+          if (error) {
+             console.error('Error saving mode notif:', error);
+             Alert.alert('Gagal', error.message || 'Gagal menyimpan riwayat ubah mode.');
+          }
+          fetchLogs(); // Refresh log
+        }
       } catch (err) {
         console.error('MQTT mode publish error:', err);
       }
@@ -209,6 +294,23 @@ export default function DeviceDetailScreen({ navigation, route }) {
     try {
       await publishText(client, MQTT_TOPICS.buzzerControl, 'ON');
       Alert.alert('Perintah Terkirim', `Buzzer untuk ${deviceName} berhasil dipicu.`);
+      
+      // Notifikasi ring alarm
+      const { session } = await getSession();
+      if (session?.user?.id) {
+        const { error } = await saveNotification({
+          userId: session.user.id,
+          deviceId: device.dbId,
+          title: `Ring Alarm Perangkat ${deviceName}`,
+          body: `Ring Alarm Perangkat ${deviceName} dibunyikan`,
+          data: { type: 'alarm' }
+        });
+        if (error) {
+           console.error('Error saving alarm notif:', error);
+           Alert.alert('Gagal', error.message || 'Gagal menyimpan riwayat alarm.');
+        }
+        fetchLogs(); // Refresh log
+      }
     } catch (error) {
       console.error('MQTT alarm publish error:', error);
       Alert.alert('Gagal Mengirim Perintah', error.message || 'Terjadi kesalahan saat publish MQTT.');
@@ -219,20 +321,6 @@ export default function DeviceDetailScreen({ navigation, route }) {
     inputRange: [0, 1],
     outputRange: [4, (trackWidth / 2) - 2] // 4 is left padding, 2 is adjustment
   });
-
-  const logs = [
-    { time: '10 April 2026, 14:05:30', text: 'Perangkat berhasil terhubung', type: 'normal' },
-    { time: '10 April 2026, 14:05:40', text: 'Lokasi terakhir Perangkat tersimpan', type: 'normal' },
-    { time: '10 April 2026, 14:06:45', text: 'Mode \'Locked\' diaktifkan', type: 'normal' },
-    { time: '10 April 2026, 15:05:40', text: 'Lokasi terakhir Perangkat tersimpan', type: 'normal' },
-    { time: '10 April 2026, 15:30:03', text: 'Terdeteksi pergerakan mencurigakan', type: 'danger' },
-    { time: '10 April 2026, 15:33:22', text: 'Alarm Perangkat berhasil dibunyikan', type: 'normal' },
-    { time: '10 April 2026, 15:34:10', text: 'Alarm Perangkat berhasil dibunyikan', type: 'normal' },
-    { time: '10 April 2026, 16:05:40', text: 'Lokasi terakhir Perangkat tersimpan', type: 'normal' },
-    { time: '10 April 2026, 16:10:50', text: 'Mode \'Locked\' dinonaktifkan', type: 'normal' },
-    { time: '10 April 2026, 16:20:13', text: 'Baterai perangkat di bawah 5%', type: 'danger' },
-    { time: '10 April 2026, 17:01:40', text: 'Koneksi perangkat terputus', type: 'normal' },
-  ];
 
   const statusColor = isConnected ? '#10B981' : '#EF4444';
   const statusBg = isConnected ? '#D1FAE5' : '#FEE2E2';
@@ -362,17 +450,26 @@ export default function DeviceDetailScreen({ navigation, route }) {
         <View style={styles.logSection}>
           <Text style={styles.logSectionTitle}>Log Aktivitas Perangkat</Text>
           <View style={styles.logCard}>
-            {logs.map((log, index) => (
-              <View key={index} style={styles.logItem}>
-                <View style={[styles.logTimelineDot, log.type === 'danger' && styles.logTimelineDotDanger]} />
-                <View style={styles.logContent}>
-                  <Text style={[styles.logTime, log.type === 'danger' && styles.logTimeDanger]}>[{log.time}]</Text>
-                  <Text style={[styles.logText, log.type === 'danger' && styles.logTextDanger]}>
-                    {log.text}
-                  </Text>
-                </View>
-              </View>
-            ))}
+            {loadingLogs ? (
+              <ActivityIndicator size="small" color={primaryColor} style={{ marginVertical: 20 }} />
+            ) : deviceLogs.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#9CA3AF', marginVertical: 20 }}>Belum ada aktivitas.</Text>
+            ) : (
+              deviceLogs.map((log, index) => {
+                const isDanger = log.data?.type === 'activity' || log.data?.type === 'alarm';
+                return (
+                  <View key={log.id || index} style={styles.logItem}>
+                    <View style={[styles.logTimelineDot, isDanger && styles.logTimelineDotDanger]} />
+                    <View style={styles.logContent}>
+                      <Text style={[styles.logTime, isDanger && styles.logTimeDanger]}>[{formatLogTime(log.created_at)}]</Text>
+                      <Text style={[styles.logText, isDanger && styles.logTextDanger]}>
+                        {log.body || log.title}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         </View>
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
+import { useFocusEffect } from '@react-navigation/native';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
 import { getSession, getUserDevices, getLatestDeviceLocation } from '../constants/supabase';
@@ -121,46 +122,53 @@ export default function TrackDeviceScreen({ route, navigation }) {
   const [loadingDevices, setLoadingDevices] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
 
-  // Fetch devices and their latest locations on mount
-  useEffect(() => {
-    const fetchDevicesWithLocations = async () => {
-      try {
-        const { session } = await getSession();
-        if (!session?.user?.id) return;
+  const fetchDevicesWithLocations = async (isBackground = false) => {
+    try {
+      const { session } = await getSession();
+      if (!session?.user?.id) return;
 
-        const { devices: fetched } = await getUserDevices(session.user.id);
-        if (!fetched?.length) {
-          setDevices([]);
-          setLoadingDevices(false);
-          return;
-        }
-
-        // Fetch latest location for each device
-        const devicesWithLocations = await Promise.all(
-          fetched.map(async (d) => {
-            const { location } = await getLatestDeviceLocation(d.id);
-            return {
-              id: d.id,
-              name: d.name,
-              identifier: d.identifier,
-              status: d.is_active ? 'Connected' : 'Disconnected',
-              isConnected: d.is_active ?? !!d.last_seen,
-              lat: location?.lat ? Number(location.lat) : null,
-              lng: location?.lng ? Number(location.lng) : null,
-            };
-          })
-        );
-
-        setDevices(devicesWithLocations);
-      } catch (error) {
-        console.error('Failed to fetch devices with locations:', error);
-      } finally {
+      const { devices: fetched } = await getUserDevices(session.user.id);
+      if (!fetched?.length) {
+        setDevices([]);
         setLoadingDevices(false);
+        return;
       }
-    };
 
-    fetchDevicesWithLocations();
-  }, []);
+      // Fetch latest location for each device
+      const devicesWithLocations = await Promise.all(
+        fetched.map(async (d) => {
+          const { location } = await getLatestDeviceLocation(d.id);
+          return {
+            id: d.id,
+            name: d.name,
+            identifier: d.identifier,
+            status: d.is_active ? 'Connected' : 'Disconnected',
+            isConnected: d.is_active ?? !!d.last_seen,
+            lat: location?.lat ? Number(location.lat) : null,
+            lng: location?.lng ? Number(location.lng) : null,
+          };
+        })
+      );
+
+      setDevices(devicesWithLocations);
+    } catch (error) {
+      console.error('Failed to fetch devices with locations:', error);
+    } finally {
+      if (!isBackground) setLoadingDevices(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchDevicesWithLocations(false);
+
+      const intervalId = setInterval(() => {
+        fetchDevicesWithLocations(true); // background refresh
+      }, 5000);
+
+      return () => clearInterval(intervalId);
+    }, [])
+  );
 
   const focusDeviceName = route?.params?.focusDevice?.name;
   const targetDevice = focusDeviceName ? devices.find(d => d.name === focusDeviceName) : null;

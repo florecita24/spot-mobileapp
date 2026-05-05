@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,9 @@ import {
 import { Svg, Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../constants/colors';
-import { getSession, getProfile, getUserDevices, saveDeviceLocation, saveMotionLog, updateDevice } from '../constants/supabase';
+import { getSession, getProfile, getUserDevices, saveDeviceLocation, saveMotionLog, updateDevice, saveNotification } from '../constants/supabase';
 import { MQTT_TOPICS } from '../constants/mqtt';
-import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt } from '../services/mqttService';
+import { connectMqtt, subscribeTopic, publishJson, disconnectMqtt, publishText } from '../services/mqttService';
 
 const { width } = Dimensions.get('window');
 const primaryColor = COLORS?.primary || '#FF6B47';
@@ -109,6 +109,9 @@ export default function DashboardScreen({ navigation }) {
   const [mqttClient, setMqttClient] = useState(null);
   const [isMqttConnected, setIsMqttConnected] = useState(false);
   const [devices, setDevices] = useState([]);
+  const devicesRef = useRef([]);
+  const lowBatteryNotified = useRef({});
+  const userIdRef = useRef(null);
   const [latestSensorByIdentifier, setLatestSensorByIdentifier] = useState({});
 
   useEffect(() => {
@@ -117,7 +120,6 @@ export default function DashboardScreen({ navigation }) {
         setIsMqttConnected(true);
         try {
           await subscribeTopic(client, MQTT_TOPICS.sensorData);
-          //await subscribeTopic(client, MQTT_TOPICS.deviceLocation);
           await subscribeTopic(client, MQTT_TOPICS.motionDetected);
           await subscribeTopic(client, 'esp32/status');
         } catch (error) {
@@ -126,50 +128,53 @@ export default function DashboardScreen({ navigation }) {
       },
       onMessage: async (topic, message) => {
         try {
-          // --- TAMBAHKAN BLOK INI ---
-          // 1. Tangkap pesan LWT / Status Terlebih Dahulu (Bukan JSON)
+          // Helper untuk mendapatkan userId jika belum di-set
+          const ensureUserId = async () => {
+            if (userIdRef.current) return userIdRef.current;
+            const { session } = await getSession();
+            if (session?.user?.id) {
+              userIdRef.current = session.user.id;
+              return session.user.id;
+            }
+            return null;
+          };
+
           if (topic === 'esp32/status') {
-            // Asumsikan semua alat pakai status ini (jika kamu punya banyak alat, nanti ESP32 harus kirim ID-nya juga)
-            // Untuk sekarang, kita paksakan alat pertama di daftar kita yang berubah statusnya
-            if (devices.length > 0) {
-              const firstDeviceIdentifier = devices[0].identifier || devices[0].id;
+            const currentDevices = devicesRef.current;
+            if (currentDevices.length > 0) {
+              const firstDeviceIdentifier = currentDevices[0].identifier || currentDevices[0].id;
+              const isOnline = message === 'ONLINE';
 
               setLatestSensorByIdentifier((prev) => ({
                 ...prev,
                 [firstDeviceIdentifier]: {
                   ...prev[firstDeviceIdentifier],
-                  online: message === 'ONLINE' // Jika ONLINE = true, jika OFFLINE = false
+                  online: isOnline
                 },
               }));
-              console.log("Status MQTT alat berubah:", message);
+
+              if (!isOnline) {
+                // Notifikasi In-App (Simpan ke database Supabase)
+                const uId = await ensureUserId();
+                if (uId) {
+                  await saveNotification({
+                    userId: uId,
+                    deviceId: currentDevices[0]?.dbId || null,
+                    title: '🔌 Perangkat Terputus',
+                    body: 'Koneksi perangkat SPOT terputus. Pastikan alat menyala.',
+                    data: { type: 'alarm' }
+                  });
+                }
+                Alert.alert('Perangkat Terputus', 'Koneksi MQTT perangkat SPOT Anda terputus.');
+              }
             }
-            return; // Stop eksekusi di sini, karena pesan ini bukan JSON
+            return;
           }
 
           const payload = JSON.parse(message);
           const identifier = payload?.deviceId || payload?.identifier || payload?.device_id;
           if (!identifier) return;
 
-          // Handle GPS / location data
-          if (topic === MQTT_TOPICS.deviceLocation) {
-            if (payload.lat != null && payload.lng != null) {
-              setLatestSensorByIdentifier((prev) => ({
-                ...prev,
-                [identifier]: { ...prev[identifier], lat: payload.lat, lng: payload.lng, heading: payload.heading },
-              }));
-
-              const { error } = await saveDeviceLocation({
-                deviceIdentifier: identifier,
-                lat: payload.lat,
-                lng: payload.lng,
-                heading: payload.heading ?? null,
-              });
-              if (error) console.error('Save location error:', error);
-            }
-            return;
-          }
-
-          // Handle motion detection data
           if (topic === MQTT_TOPICS.motionDetected) {
             if (payload.acc_peak != null) {
               const { error } = await saveMotionLog({
@@ -177,38 +182,69 @@ export default function DashboardScreen({ navigation }) {
                 accPeak: payload.acc_peak,
               });
               if (error) console.error('Save motion log error:', error);
+
+              // Notifikasi In-App (Simpan ke DB)
+              const uId = await ensureUserId();
+              if (uId) {
+                const currentDevices = devicesRef.current;
+                const matchedDevice = currentDevices.find(d => d.identifier === identifier);
+                await saveNotification({
+                  userId: uId,
+                  deviceId: matchedDevice?.dbId || null,
+                  title: '🚨 PERINGATAN KEAMANAN!',
+                  body: `Terdeteksi pergerakan mencurigakan pada perangkat SPOT!`,
+                  data: { type: 'activity' }
+                });
+              }
+              Alert.alert('Peringatan Keamanan', 'Terdeteksi pergerakan mencurigakan pada perangkat SPOT Anda!');
             }
             return;
           }
 
-          // Handle general sensor data (battery, online status, etc.)
-          // Handle general sensor data (battery, online status, etc.)
           if (topic === MQTT_TOPICS.sensorData) {
             setLatestSensorByIdentifier((prev) => ({
               ...prev,
               [identifier]: { ...prev[identifier], ...payload, online: true },
             }));
 
-            // Update battery_percentage in Supabase if present
             if (payload.battery != null) {
-              const matchedDevice = devices.find(d => d.identifier === identifier);
+              const currentDevices = devicesRef.current;
+              const matchedDevice = currentDevices.find(d => d.identifier === identifier);
               if (matchedDevice?.dbId) {
                 await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battery });
               }
+
+              if (payload.battery <= 20 && !lowBatteryNotified.current[identifier]) {
+                // Notifikasi In-App Baterai Lemah
+                const uId = await ensureUserId();
+                if (uId) {
+                  await saveNotification({
+                    userId: uId,
+                    deviceId: matchedDevice?.dbId || null,
+                    title: '🔋 Baterai Lemah',
+                    body: `Baterai SPOT tersisa ${payload.battery}%. Segera isi daya agar alat tetap aktif.`,
+                    data: { type: 'default' }
+                  });
+                }
+                lowBatteryNotified.current[identifier] = true;
+              } else if (payload.battery > 20) {
+                lowBatteryNotified.current[identifier] = false;
+              }
             }
 
-            // --- TAMBAHKAN BLOK PENYIMPANAN LOKASI INI ---
-            // Cek apakah data sensor membawa lokasi GPS yang sah (bukan 0)
-            if (payload.lat != null && payload.lng != null && payload.lat !== 0) {
-              const { error } = await saveDeviceLocation({
-                deviceIdentifier: identifier,
-                lat: payload.lat,
-                lng: payload.lng,
-                heading: payload.heading ?? null,
-              });
-              if (error) console.error('Save location error:', error);
+            // Simpan lokasi ke database jika ada latitude dan longitude di MQTT
+            if (payload.lat != null && payload.lng != null) {
+              try {
+                await saveDeviceLocation({
+                  deviceIdentifier: identifier,
+                  lat: payload.lat,
+                  lng: payload.lng,
+                  heading: payload.heading || null
+                });
+              } catch (locationErr) {
+                console.error('Error saving device location:', locationErr);
+              }
             }
-            // ---------------------------------------------
           }
         } catch (error) {
           console.error('MQTT payload parse error:', error);
@@ -235,25 +271,26 @@ export default function DashboardScreen({ navigation }) {
         try {
           const { session } = await getSession();
           if (session?.user?.id) {
+            userIdRef.current = session.user.id;
             const { devices: fetchedDevices } = await getUserDevices(session.user.id);
             if (fetchedDevices?.length) {
-              setDevices(
-                fetchedDevices.map((item) => ({
-                  id: item.identifier || item.id,
-                  dbId: item.id,
-                  name: item.name,
-                  identifier: item.identifier,
-                  battery: item.battery_percentage || 0,
-                  isConnected: false,
-                  isLocked: item.mode === 'Locked',
-                  buzzerOn: item.buzzer_on || false,
-                }))
-              );
+              const mappedDevices = fetchedDevices.map((item) => ({
+                id: item.identifier || item.id,
+                dbId: item.id,
+                name: item.name,
+                identifier: item.identifier,
+                battery: item.battery_percentage || 0,
+                isConnected: false,
+                isLocked: item.mode === 'Locked',
+                buzzerOn: item.buzzer_on || false,
+                isActive: item.is_active || false,
+              }));
+              setDevices(mappedDevices);
+              devicesRef.current = mappedDevices;
             }
 
             const { profile } = await getProfile(session.user.id);
             if (profile?.full_name) {
-              // Extract first name (first word of full name)
               const firstNameOnly = profile.full_name.split(' ')[0];
               setFirstName(firstNameOnly);
             }
@@ -277,7 +314,8 @@ export default function DashboardScreen({ navigation }) {
         ...device,
         battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
 
-        isConnected: liveData.online === true,
+        // Perangkat hanya 'Connected' jika belum di-unpair (isActive) DAN sedang online di MQTT
+        isConnected: device.isActive && (liveData.online !== false),
 
         isLocked: typeof liveData?.isLocked === 'boolean' ? liveData.isLocked : device.isLocked,
         latestTemp: liveData?.temperature,
@@ -292,8 +330,19 @@ export default function DashboardScreen({ navigation }) {
     }
 
     try {
-      mqttClient.publish(MQTT_TOPICS.buzzerControl, 'ON');
+      await publishText(mqttClient, MQTT_TOPICS.buzzerControl, 'ON');
       Alert.alert('Perintah Terkirim', `Buzzer untuk ${device.name} berhasil dipicu.`);
+
+      // Notifikasi In-App Ring Alarm
+      if (userIdRef.current) {
+        await saveNotification({
+          userId: userIdRef.current,
+          deviceId: device.dbId || null,
+          title: `Ring Alarm Perangkat ${device.name}`,
+          body: `Ring Alarm Perangkat ${device.name} dibunyikan`,
+          data: { type: 'alarm' }
+        });
+      }
     } catch (error) {
       Alert.alert('Gagal Mengirim Perintah', error.message || 'Terjadi kesalahan saat publish MQTT.');
     }

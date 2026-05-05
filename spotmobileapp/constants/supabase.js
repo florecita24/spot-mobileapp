@@ -264,6 +264,31 @@ export const saveMotionLog = async ({ deviceIdentifier, accPeak }) => {
 };
 
 // Notification Functions (notifications table)
+export const saveNotification = async ({ userId, deviceId, title, body, data = {} }) => {
+  try {
+    const { data: notification, error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        device_id: deviceId || null,
+        title,
+        body,
+        data,
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error('Supabase saveNotification error:', error);
+      throw error;
+    }
+    return { notification, error: null };
+  } catch (error) {
+    console.error('saveNotification catch block:', error);
+    return { notification: null, error };
+  }
+};
+
 export const getNotifications = async (userId) => {
   try {
     const { data, error } = await supabase
@@ -276,6 +301,22 @@ export const getNotifications = async (userId) => {
     return { notifications: data || [], error: null };
   } catch (error) {
     return { notifications: [], error };
+  }
+};
+
+export const getDeviceNotifications = async (deviceId) => {
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('device_id', deviceId)
+      .order('created_at', { ascending: false })
+      .limit(50); // Batasi 50 log terakhir agar tidak terlalu berat
+
+    if (error) throw error;
+    return { logs: data || [], error: null };
+  } catch (error) {
+    return { logs: [], error };
   }
 };
 
