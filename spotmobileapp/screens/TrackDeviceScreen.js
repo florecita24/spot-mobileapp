@@ -11,11 +11,14 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Svg, Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
 import { COLORS } from '../constants/colors';
 import { getSession, getUserDevices, getLatestDeviceLocation } from '../constants/supabase';
+import * as Location from 'expo-location';
 
 const primaryColor = COLORS?.primary || '#FF6B47';
 const primaryLight = '#FFF0ED';
@@ -24,8 +27,8 @@ const surfaceColor = '#FFFFFF';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BOTTOM_SHEET_MAX_HEIGHT = SCREEN_HEIGHT * 0.6;
-const BOTTOM_SHEET_MIN_HEIGHT = 260; 
-const MAX_UPWARD_TRANSLATE_Y = BOTTOM_SHEET_MIN_HEIGHT - BOTTOM_SHEET_MAX_HEIGHT; 
+const BOTTOM_SHEET_MIN_HEIGHT = 260;
+const MAX_UPWARD_TRANSLATE_Y = BOTTOM_SHEET_MIN_HEIGHT - BOTTOM_SHEET_MAX_HEIGHT;
 const MAX_DOWNWARD_TRANSLATE_Y = 0;
 
 // --- Icons ---
@@ -89,9 +92,9 @@ const DeviceIcon = ({ color, size = 24 }) => (
 const MapMarkerDeviceIcon = ({ color, size = 44 }) => (
   <Svg width={size} height={size * 1.25} viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">
     {/* Map Pin Background */}
-    <Path 
-      d="M12 29C12 29 22 20.4183 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 20.4183 12 29 12 29Z" 
-      fill={color} 
+    <Path
+      d="M12 29C12 29 22 20.4183 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 20.4183 12 29 12 29Z"
+      fill={color}
     />
     {/* Tablet / Monitor */}
     <Rect x="6" y="7" width="10" height="7" rx="1" stroke="#FFF" strokeWidth="1.2" />
@@ -116,6 +119,7 @@ const GoogleMapsUserDot = ({ size = 24 }) => (
 export default function TrackDeviceScreen({ route, navigation }) {
   const [devices, setDevices] = useState([]);
   const [loadingDevices, setLoadingDevices] = useState(true);
+  const [userLocation, setUserLocation] = useState(null);
 
   // Fetch devices and their latest locations on mount
   useEffect(() => {
@@ -161,33 +165,107 @@ export default function TrackDeviceScreen({ route, navigation }) {
   const focusDeviceName = route?.params?.focusDevice?.name;
   const targetDevice = focusDeviceName ? devices.find(d => d.name === focusDeviceName) : null;
 
-  // Only use device location if available, otherwise fallback to default
-  const defaultRegion = {
-    latitude: -6.8910,
-    longitude: 107.6110,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  };
+  // Meminta izin lokasi dan mengunci koordinat
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Izin akses lokasi ditolak oleh pengguna');
+        // Kalau ditolak, kita kasih default ke ITB
+        setUserLocation({ latitude: -6.8910, longitude: 107.6110, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+        return;
+      }
 
-  const initialRegion = targetDevice && targetDevice.lat != null ? {
-    latitude: targetDevice.lat - 0.0004,
-    longitude: targetDevice.lng,
-    latitudeDelta: 0.001,
-    longitudeDelta: 0.001,
-  } : defaultRegion;
+      try {
+        let location = await Location.getCurrentPositionAsync({});
+        setUserLocation({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        });
+      } catch (error) {
+        console.log('Gagal mendapatkan lokasi awal:', error);
+        setUserLocation({ latitude: -6.8910, longitude: 107.6110, latitudeDelta: 0.01, longitudeDelta: 0.01 });
+      }
+    })();
+  }, []);
+
+  // Meminta izin lokasi asli ke HP saat layar dibuka
+  // Meminta izin lokasi DAN langsung terbang ke lokasi HP (jika tidak sedang melacak alat)
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Izin akses lokasi ditolak oleh pengguna');
+        return;
+      }
+
+      // Jika halaman ini dibuka TANPA membawa nama perangkat spesifik (misal: klik dari menu bawah)
+      if (!focusDeviceName) {
+        try {
+          // Ambil koordinat saat ini
+          let location = await Location.getCurrentPositionAsync({});
+
+          // Beri jeda sedikit agar peta selesai render, lalu terbang ke lokasi HP-mu
+          setTimeout(() => {
+            mapRef.current?.animateToRegion({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            }, 1000);
+          }, 300);
+        } catch (error) {
+          console.log('Gagal mendapatkan lokasi awal:', error);
+        }
+      }
+    })();
+  }, [focusDeviceName]);
+  // --------------------------
+  const initialRegion = (targetDevice && targetDevice.lat != null)
+    ? {
+      latitude: targetDevice.lat - 0.0004,
+      longitude: targetDevice.lng,
+      latitudeDelta: 0.001,
+      longitudeDelta: 0.001,
+    }
+    : userLocation;
 
   const mapRef = useRef(null);
 
-  const handleRecenter = () => {
-    mapRef.current?.animateToRegion(initialRegion, 1000);
+  const handleRecenter = async () => {
+    try {
+      // 1. Minta HP kamu untuk membaca titik kordinat GPS saat ini juga
+      let location = await Location.getCurrentPositionAsync({});
+
+      // 2. Perintahkan peta untuk terbang ke titik tersebut
+      mapRef.current?.animateToRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.005, // Angka ini untuk mengatur tingkat zoom
+        longitudeDelta: 0.005,
+      }, 1000); // 1000ms = Durasi animasi terbang
+    } catch (error) {
+      console.log('Gagal mendapatkan lokasi GPS:', error);
+    }
   };
 
   const handleTrackDevice = (device) => {
     if (!device.isConnected) return;
     
+    // Satpam: Cek apakah koordinatnya ada dan bukan 0
+    if (device.lat == null || device.lng == null || (device.lat === 0 && device.lng === 0)) {
+      Alert.alert(
+        'Lokasi Belum Tersedia', 
+        'Perangkat SPOT belum mengunci sinyal satelit. Pastikan alat berada di luar ruangan.'
+      );
+      return;
+    }
+
     // Zoom map to the device location
     const region = {
-      latitude: device.lat - 0.0004, // Offset slightly so it's not hidden behind the bottom sheet
+      latitude: device.lat - 0.0004,
       longitude: device.lng,
       latitudeDelta: 0.001,
       longitudeDelta: 0.001,
@@ -221,11 +299,11 @@ export default function TrackDeviceScreen({ route, navigation }) {
       onPanResponderMove: (e, gesture) => {
         const newDy = lastGestureDy.current + gesture.dy;
         if (newDy < MAX_UPWARD_TRANSLATE_Y) {
-           animatedValue.setValue(MAX_UPWARD_TRANSLATE_Y - lastGestureDy.current);
+          animatedValue.setValue(MAX_UPWARD_TRANSLATE_Y - lastGestureDy.current);
         } else if (newDy > MAX_DOWNWARD_TRANSLATE_Y) {
-           animatedValue.setValue(MAX_DOWNWARD_TRANSLATE_Y - lastGestureDy.current);
+          animatedValue.setValue(MAX_DOWNWARD_TRANSLATE_Y - lastGestureDy.current);
         } else {
-           animatedValue.setValue(gesture.dy);
+          animatedValue.setValue(gesture.dy);
         }
       },
       onPanResponderRelease: (e, gesture) => {
@@ -263,90 +341,92 @@ export default function TrackDeviceScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
-      
-      {/* Interactive Map */}
-      <MapView 
-        ref={mapRef}
-        style={StyleSheet.absoluteFillObject} 
-        initialRegion={initialRegion}
-        showsUserLocation={true}
-        showsMyLocationButton={false} // Custom button used
-        showsCompass={false}
-      >
-        {/* Device Markers - only show devices with valid locations */}
-        {devices.filter(d => d.lat != null && d.lng != null).map((device) => {
-          const pulseAnim = new Animated.Value(0);
-          
-          if (device.isConnected) {
-            Animated.loop(
-              Animated.sequence([
-                Animated.timing(pulseAnim, {
-                  toValue: 1,
-                  duration: 2000,
-                  useNativeDriver: true,
-                }),
-                Animated.timing(pulseAnim, {
-                  toValue: 0,
-                  duration: 0,
-                  useNativeDriver: true,
-                }),
-              ])
-            ).start();
-          }
 
-          return (
-            <Marker 
-              key={device.id}
-              coordinate={{ latitude: device.lat, longitude: device.lng }}
-              title={device.name}
-              description={device.status}
-              anchor={{ x: 0.5, y: 1 }}
-            >
-              <View style={{ alignItems: 'center', justifyContent: 'flex-end', width: 80, height: 80 }}>
-                {device.isConnected && (
-                  <Animated.View
-                    style={{
-                      position: 'absolute',
-                      top: 10,
-                      width: 80,
-                      height: 80,
-                      borderRadius: 40,
-                      backgroundColor: primaryColor,
-                      opacity: pulseAnim.interpolate({
-                        inputRange: [0, 0.2, 1],
-                        outputRange: [0, 0.4, 0],
-                      }),
-                      transform: [
-                        {
-                          scale: pulseAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.3, 1.2],
+      {/* ================= MULAI COPY DARI SINI ================= */}
+      {/* Jika koordinat awal belum dikunci, tampilkan loading */}
+      {!initialRegion ? (
+        <View style={{ ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' }}>
+          <ActivityIndicator size="large" color={primaryColor} />
+          <Text style={{ marginTop: 12, color: '#6B7280', fontWeight: '600' }}>Mengunci Lokasi Anda...</Text>
+        </View>
+      ) : (
+        /* Jika koordinat sudah dikunci, tampilkan Map dan Tombol Recenter */
+        <>
+          <MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            initialRegion={initialRegion}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            showsCompass={false}
+          >
+            {/* Device Markers */}
+            {devices.filter(d => d.lat != null && d.lng != null).map((device) => {
+              const pulseAnim = new Animated.Value(0);
+
+              if (device.isConnected) {
+                Animated.loop(
+                  Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                      toValue: 1,
+                      duration: 2000,
+                      useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                      toValue: 0,
+                      duration: 0,
+                      useNativeDriver: true,
+                    }),
+                  ])
+                ).start();
+              }
+
+              return (
+                <Marker
+                  key={device.id}
+                  coordinate={{ latitude: device.lat, longitude: device.lng }}
+                  title={device.name}
+                  description={device.status}
+                  anchor={{ x: 0.5, y: 1 }}
+                >
+                  <View style={{ alignItems: 'center', justifyContent: 'flex-end', width: 80, height: 80 }}>
+                    {device.isConnected && (
+                      <Animated.View
+                        style={{
+                          position: 'absolute',
+                          top: 10,
+                          width: 80,
+                          height: 80,
+                          borderRadius: 40,
+                          backgroundColor: primaryColor,
+                          opacity: pulseAnim.interpolate({
+                            inputRange: [0, 0.2, 1],
+                            outputRange: [0, 0.4, 0],
                           }),
-                        },
-                      ],
-                    }}
-                  />
-                )}
-                <MapMarkerDeviceIcon color={device.isConnected ? primaryColor : '#9CA3AF'} />
-              </View>
-            </Marker>
-          );
-        })}
+                          transform: [
+                            {
+                              scale: pulseAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.3, 1.2],
+                              }),
+                            },
+                          ],
+                        }}
+                      />
+                    )}
+                    <MapMarkerDeviceIcon color={device.isConnected ? primaryColor : '#9CA3AF'} />
+                  </View>
+                </Marker>
+              );
+            })}
+          </MapView>
 
-        {/* Dummy User Location */}
-        <Marker 
-          coordinate={{ latitude: -6.8910, longitude: 107.6110 }}
-          title="Posisi Anda"
-          anchor={{ x: 0.5, y: 0.5 }}
-        >
-          <GoogleMapsUserDot />
-        </Marker>
-      </MapView>
-
-      {/* Recenter Button */}
-      <TouchableOpacity style={styles.recenterBtn} onPress={handleRecenter}>
-        <TargetIcon color={primaryColor} />
-      </TouchableOpacity>
+          {/* Recenter Button */}
+          <TouchableOpacity style={styles.recenterBtn} onPress={handleRecenter}>
+            <TargetIcon color={primaryColor} />
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* Smooth Top Header (Semi-transparent Glassmorphism feel) */}
       <View style={styles.headerContainer}>
@@ -357,9 +437,9 @@ export default function TrackDeviceScreen({ route, navigation }) {
       </View>
 
       {/* Draggable Bottom Sheet */}
-      <Animated.View 
+      <Animated.View
         style={[
-          styles.bottomSheet, 
+          styles.bottomSheet,
           { transform: [{ translateY: bottomSheetTranslateY }] }
         ]}
       >
@@ -370,8 +450,8 @@ export default function TrackDeviceScreen({ route, navigation }) {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScroll}>
           {devices.map((device) => (
-            <TouchableOpacity 
-              key={device.id} 
+            <TouchableOpacity
+              key={device.id}
               style={[styles.deviceCard, !device.isConnected && styles.deviceCardInactive]}
               onPress={() => handleTrackDevice(device)}
               activeOpacity={device.isConnected ? 0.7 : 1}
@@ -391,7 +471,7 @@ export default function TrackDeviceScreen({ route, navigation }) {
                   </View>
                 </View>
               </View>
-              
+
               {/* Action Button */}
               <View style={[styles.actionBtn, device.isConnected ? styles.actionBtnActive : styles.actionBtnInactive]}>
                 <Text style={device.isConnected ? styles.actionBtnTextActive : styles.actionBtnTextInactive}>Lacak</Text>
@@ -406,20 +486,20 @@ export default function TrackDeviceScreen({ route, navigation }) {
       {/* Floating Bottom Nav (Island Style) */}
       <View style={styles.floatingNavContainer}>
         <View style={styles.floatingNav}>
-          <TouchableOpacity 
-            style={styles.navItem} 
+          <TouchableOpacity
+            style={styles.navItem}
             onPress={() => navigation.navigate('Dashboard')}
           >
             <HomeIcon color="#9CA3AF" />
             <Text style={styles.navText}>Beranda</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity style={styles.navItem}>
             <TargetIcon color={primaryColor} />
             <Text style={[styles.navText, { color: primaryColor }]}>Lacak</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.navItem}
             onPress={() => navigation.navigate('Profile')}
           >
@@ -497,7 +577,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFF',
-    height: BOTTOM_SHEET_MAX_HEIGHT, 
+    height: BOTTOM_SHEET_MAX_HEIGHT,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,

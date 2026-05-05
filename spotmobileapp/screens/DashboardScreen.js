@@ -182,6 +182,7 @@ export default function DashboardScreen({ navigation }) {
           }
 
           // Handle general sensor data (battery, online status, etc.)
+          // Handle general sensor data (battery, online status, etc.)
           if (topic === MQTT_TOPICS.sensorData) {
             setLatestSensorByIdentifier((prev) => ({
               ...prev,
@@ -190,12 +191,24 @@ export default function DashboardScreen({ navigation }) {
 
             // Update battery_percentage in Supabase if present
             if (payload.battery != null) {
-              // Find the device to get its Supabase ID
               const matchedDevice = devices.find(d => d.identifier === identifier);
               if (matchedDevice?.dbId) {
                 await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battery });
               }
             }
+
+            // --- TAMBAHKAN BLOK PENYIMPANAN LOKASI INI ---
+            // Cek apakah data sensor membawa lokasi GPS yang sah (bukan 0)
+            if (payload.lat != null && payload.lng != null && payload.lat !== 0) {
+              const { error } = await saveDeviceLocation({
+                deviceIdentifier: identifier,
+                lat: payload.lat,
+                lng: payload.lng,
+                heading: payload.heading ?? null,
+              });
+              if (error) console.error('Save location error:', error);
+            }
+            // ---------------------------------------------
           }
         } catch (error) {
           console.error('MQTT payload parse error:', error);
