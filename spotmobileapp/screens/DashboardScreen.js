@@ -279,7 +279,7 @@ export default function DashboardScreen({ navigation }) {
                 dbId: item.id,
                 name: item.name,
                 identifier: item.identifier,
-                battery: item.battery_percentage || 0,
+                battery: item.battery_percentage || 90, // Dummy 90% jika 0 atau belum ada data
                 isConnected: false,
                 isLocked: item.mode === 'Locked',
                 buzzerOn: item.buzzer_on || false,
@@ -310,9 +310,12 @@ export default function DashboardScreen({ navigation }) {
   const devicesToRender = devices.length
     ? devices.map((device) => {
       const liveData = latestSensorByIdentifier[device.identifier || device.id] || {};
+      let currentBattery = Number.isFinite(liveData?.battery) ? liveData.battery : device.battery;
+      if (currentBattery === 0) currentBattery = 90; // Fallback ke 90% (dummy) jika bernilai 0
+
       return {
         ...device,
-        battery: Number.isFinite(liveData?.battery) ? liveData.battery : device.battery,
+        battery: currentBattery,
 
         // Perangkat hanya 'Connected' jika belum di-unpair (isActive) DAN sedang online di MQTT
         isConnected: device.isActive && (liveData.online !== false),
