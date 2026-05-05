@@ -140,12 +140,12 @@ export default function DeviceDetailScreen({ navigation, route }) {
       // Simulate Connection
       setConnectionStatus('connecting');
       setModalVisible(true);
-      
+
       // Simulate API call delay (2 seconds)
       setTimeout(() => {
         // Randomize success/fail for testing purposes (50% chance)
         const isSuccess = Math.random() > 0.5;
-        
+
         if (isSuccess) {
           setConnectionStatus('success');
           setIsConnected(true);
@@ -164,25 +164,32 @@ export default function DeviceDetailScreen({ navigation, route }) {
   const toggleMode = async () => {
     const newValue = !isLocked;
     setIsLocked(newValue);
+
     Animated.timing(toggleAnim, {
       toValue: newValue ? 1 : 0,
       duration: 300,
       useNativeDriver: false,
     }).start();
 
-    const newMode = newValue ? 'locked' : 'unlocked';
+    // 1. Gunakan huruf kapital persis seperti di Supabase
+    const newMode = newValue ? 'Locked' : 'Unlocked';
+
+    // 2. Simpan status terbaru ke Supabase
     if (device.dbId) {
       await updateDevice(device.dbId, { mode: newMode });
     }
 
-    // Gunakan koneksi yang sama dari Dashboard
+    // 3. Kirim perintah ke ESP32 lewat MQTT (menggunakan koneksi global)
     const client = getActiveMqttClient();
     if (client && client.isConnected()) {
       try {
         await publishJson(client, MQTT_TOPICS.modeControl, {
           deviceId: device.identifier || device.id,
-          mode: newMode,
-        });
+          mode: newMode, // Ini akan mengirim "Locked" atau "Unlocked" ke Arduino nanti
+        },
+          1,
+          true
+        );
       } catch (err) {
         console.error('MQTT mode publish error:', err);
       }
@@ -233,7 +240,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={bgColor} />
-      
+
       {/* Sleek Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -244,7 +251,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Main Device Card */}
         <View style={styles.card}>
           <View style={styles.cardTopRow}>
@@ -284,13 +291,13 @@ export default function DeviceDetailScreen({ navigation, route }) {
 
           {/* Connection Actions */}
           <View style={styles.actionGroupRow}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.btnOutline}
               onPress={() => navigation.navigate('EditConnection', { device })}
             >
               <Text style={styles.btnOutlineText}>Ubah Koneksi</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.btnSolid, isConnected && styles.btnSolidDanger]}
               onPress={handleToggleConnection}
             >
@@ -308,15 +315,15 @@ export default function DeviceDetailScreen({ navigation, route }) {
               <Text style={styles.modeLabel}>Mode Perangkat</Text>
             </View>
             <View style={styles.customToggleContainer}>
-              <TouchableOpacity 
-                activeOpacity={1} 
+              <TouchableOpacity
+                activeOpacity={1}
                 onPress={toggleMode}
                 disabled={!isConnected}
                 style={[styles.customToggleTrack, !isConnected && styles.customToggleTrackDisabled]}
                 onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
               >
                 <Animated.View style={[styles.customToggleThumb, !isConnected && styles.customToggleThumbDisabled, { transform: [{ translateX: thumbTranslateX }] }]} />
-                
+
                 <View style={styles.customToggleLabelContainer}>
                   <View style={styles.customToggleLabel}>
                     <LockIcon isLocked={false} color={!isConnected ? '#D1D5DB' : (!isLocked ? primaryColor : '#9CA3AF')} size={16} />
@@ -331,7 +338,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
             </View>
 
             <View style={styles.actionGroupRow}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.btnOutlinePill, !isConnected && styles.btnOutlineDisabled]}
                 disabled={!isConnected}
                 onPress={handleRingAlarm}
@@ -339,7 +346,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
                 <AlarmIcon color={isConnected ? primaryColor : '#9CA3AF'} />
                 <Text style={[styles.btnOutlineText, !isConnected && styles.btnOutlineTextDisabled]}>Ring Alarm</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.btnSolid, !isConnected && styles.btnSolidDisabled]}
                 disabled={!isConnected}
                 onPress={() => navigation.navigate('TrackDevice', { focusDevice: device })}
@@ -448,7 +455,7 @@ export default function DeviceDetailScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Rename Perangkat</Text>
-            
+
             <TextInput
               style={styles.renameInput}
               placeholder="Masukkan nama perangkat..."
@@ -456,8 +463,8 @@ export default function DeviceDetailScreen({ navigation, route }) {
               value={renameInput}
               onChangeText={setRenameInput}
             />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.modalBtn}
               onPress={handleRenameDevice}
             >

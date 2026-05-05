@@ -9,7 +9,7 @@ export const MQTT_CONFIG = {
 
 export const MQTT_TOPICS = {
   sensorData: 'esp32/sensor/data',
-  deviceLocation: 'esp32/gps/data',
+  //deviceLocation: 'esp32/gps/data',
   motionDetected: 'esp32/motion/data',
   buzzerControl: 'esp32/buzzer/control',
   modeControl: 'esp32/mode/control',

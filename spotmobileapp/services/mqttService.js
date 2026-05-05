@@ -7,8 +7,8 @@ let activeMqttClient = null;
 if (!global.localStorage) {
   global.localStorage = {
     getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
+    setItem: () => { },
+    removeItem: () => { },
   };
 }
 
@@ -75,7 +75,7 @@ export const subscribeTopic = (client, topic) => {
   });
 };
 
-export const publishJson = (client, topic, payload) => {
+export const publishJson = (client, topic, payload, qos = 1, retained = false) => {
   return new Promise((resolve, reject) => {
     // Cek apakah client ada dan sedang terhubung
     if (!client || !client.isConnected()) {
@@ -85,10 +85,11 @@ export const publishJson = (client, topic, payload) => {
     try {
       const body = JSON.stringify(payload);
       const message = new Paho.Message(body);
-      
+
       message.destinationName = topic;
-      message.qos = 1;
-      
+      message.qos = qos;              // Gunakan parameter qos
+      message.retained = retained;    // Gunakan parameter retained (Paho MQTT menggunakan istilah 'retained')
+
       client.send(message);
       resolve(true);
     } catch (err) {
@@ -118,10 +119,10 @@ export const publishText = (client, topic, payload) => {
     try {
       // Untuk publishText, kita langsung jadikan payload sebagai message (bukan JSON)
       const message = new Paho.Message(payload);
-      
+
       message.destinationName = topic;
       message.qos = 1;
-      
+
       client.send(message);
       resolve(true);
     } catch (err) {

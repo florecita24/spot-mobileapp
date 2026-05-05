@@ -117,7 +117,7 @@ export default function DashboardScreen({ navigation }) {
         setIsMqttConnected(true);
         try {
           await subscribeTopic(client, MQTT_TOPICS.sensorData);
-          await subscribeTopic(client, MQTT_TOPICS.deviceLocation);
+          //await subscribeTopic(client, MQTT_TOPICS.deviceLocation);
           await subscribeTopic(client, MQTT_TOPICS.motionDetected);
           await subscribeTopic(client, 'esp32/status');
         } catch (error) {
@@ -245,7 +245,7 @@ export default function DashboardScreen({ navigation }) {
                   identifier: item.identifier,
                   battery: item.battery_percentage || 0,
                   isConnected: false,
-                  isLocked: item.mode === 'locked',
+                  isLocked: item.mode === 'Locked',
                   buzzerOn: item.buzzer_on || false,
                 }))
               );
