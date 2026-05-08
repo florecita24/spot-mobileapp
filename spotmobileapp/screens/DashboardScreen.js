@@ -111,6 +111,8 @@ export default function DashboardScreen({ navigation }) {
   const [devices, setDevices] = useState([]);
   const devicesRef = useRef([]);
   const lowBatteryNotified = useRef({});
+  const lastSavedBattery = useRef({}); // Untuk menyimpan angka baterai terakhir
+  const lastSavedLocation = useRef({}); // Untuk menyimpan lokasi terakhir
   const userIdRef = useRef(null);
   const [latestSensorByIdentifier, setLatestSensorByIdentifier] = useState({});
 
@@ -212,6 +214,7 @@ export default function DashboardScreen({ navigation }) {
               const matchedDevice = currentDevices.find(d => d.identifier === identifier);
               if (matchedDevice?.dbId) {
                 await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battery });
+                lastSavedBattery.current[identifier] = payload.battery;
               }
 
               if (payload.battery <= 20 && !lowBatteryNotified.current[identifier]) {
@@ -226,6 +229,7 @@ export default function DashboardScreen({ navigation }) {
                     data: { type: 'default' }
                   });
                 }
+
                 lowBatteryNotified.current[identifier] = true;
               } else if (payload.battery > 20) {
                 lowBatteryNotified.current[identifier] = false;
@@ -233,18 +237,35 @@ export default function DashboardScreen({ navigation }) {
             }
 
             // Simpan lokasi ke database jika ada latitude dan longitude di MQTT
-            if (payload.lat != null && payload.lng != null) {
-              try {
-                await saveDeviceLocation({
+            // --- BLOK PENYIMPANAN LOKASI YANG SUDAH DIOPTIMASI ---
+            if (payload.lat != null && payload.lng != null && payload.lat !== 0) {
+              
+              // Cek memori lokasi terakhir untuk alat ini
+              const lastLoc = lastSavedLocation.current[identifier];
+
+              // Filter: Simpan JIKA belum ada data sama sekali, ATAU alat bergeser > 0.0001 derajat (~11 meter)
+              const isSignificantMove = !lastLoc || 
+                Math.abs(payload.lat - lastLoc.lat) > 0.0001 || 
+                Math.abs(payload.lng - lastLoc.lng) > 0.0001;
+
+              if (isSignificantMove) {
+                const { error } = await saveDeviceLocation({
                   deviceIdentifier: identifier,
                   lat: payload.lat,
                   lng: payload.lng,
-                  heading: payload.heading || null
+                  heading: payload.heading ?? null,
                 });
-              } catch (locationErr) {
-                console.error('Error saving device location:', locationErr);
+
+                if (!error) {
+                  // Jika berhasil simpan, perbarui memori dengan koordinat terbaru ini
+                  lastSavedLocation.current[identifier] = { lat: payload.lat, lng: payload.lng };
+                  console.log(`[Filter Aktif] Lokasi baru ${identifier} disimpan ke Database!`);
+                } else {
+                  console.error('Save location error:', error);
+                }
               }
             }
+            // -----------------------------------------------------
           }
         } catch (error) {
           console.error('MQTT payload parse error:', error);
