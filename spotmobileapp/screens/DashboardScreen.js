@@ -175,7 +175,12 @@ export default function DashboardScreen({ navigation }) {
 
           const payload = JSON.parse(message);
           const identifier = payload?.deviceId || payload?.identifier || payload?.device_id;
-          if (!identifier) return;
+          console.log('[MQTT sensorData] Payload:', payload);
+          console.log('[MQTT sensorData] Identifier:', identifier);
+          if (!identifier) {
+            console.warn('[MQTT] No identifier found in payload');
+            return;
+          }
 
           if (topic === MQTT_TOPICS.motionDetected) {
             if (payload.acc_peak != null) {
@@ -209,15 +214,21 @@ export default function DashboardScreen({ navigation }) {
               [identifier]: { ...prev[identifier], ...payload, online: true },
             }));
 
-            if (payload.battery != null) {
+            if (payload.battPct != null) {
               const currentDevices = devicesRef.current;
+              console.log('[MQTT Battery] battPct:', payload.battPct, 'currentDevices:', currentDevices.length);
               const matchedDevice = currentDevices.find(d => d.identifier === identifier);
+              console.log('[MQTT Battery] matchedDevice:', matchedDevice);
               if (matchedDevice?.dbId) {
-                await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battery });
-                lastSavedBattery.current[identifier] = payload.battery;
+                console.log('[MQTT Battery] Updating device', matchedDevice.dbId, 'with battery', payload.battPct);
+                await updateDevice(matchedDevice.dbId, { battery_percentage: payload.battPct });
+                lastSavedBattery.current[identifier] = payload.battPct;
+                console.log('[MQTT Battery] Update sent to DB');
+              } else {
+                console.warn('[MQTT Battery] No matchedDevice or dbId:', matchedDevice);
               }
 
-              if (payload.battery <= 20 && !lowBatteryNotified.current[identifier]) {
+              if (payload.battPct <= 20 && !lowBatteryNotified.current[identifier]) {
                 // Notifikasi In-App Baterai Lemah
                 const uId = await ensureUserId();
                 if (uId) {
@@ -225,13 +236,13 @@ export default function DashboardScreen({ navigation }) {
                     userId: uId,
                     deviceId: matchedDevice?.dbId || null,
                     title: '🔋 Baterai Lemah',
-                    body: `Baterai SPOT tersisa ${payload.battery}%. Segera isi daya agar alat tetap aktif.`,
+                    body: `Baterai SPOT tersisa ${payload.battPct}%. Segera isi daya agar alat tetap aktif.`,
                     data: { type: 'default' }
                   });
                 }
 
                 lowBatteryNotified.current[identifier] = true;
-              } else if (payload.battery > 20) {
+              } else if (payload.battPct > 20) {
                 lowBatteryNotified.current[identifier] = false;
               }
             }
@@ -294,6 +305,7 @@ export default function DashboardScreen({ navigation }) {
           if (session?.user?.id) {
             userIdRef.current = session.user.id;
             const { devices: fetchedDevices } = await getUserDevices(session.user.id);
+            console.log('[Dashboard] Fetched devices from DB:', fetchedDevices);
             if (fetchedDevices?.length) {
               const mappedDevices = fetchedDevices.map((item) => ({
                 id: item.identifier || item.id,
@@ -306,6 +318,7 @@ export default function DashboardScreen({ navigation }) {
                 buzzerOn: item.buzzer_on || false,
                 isActive: item.is_active || false,
               }));
+              console.log('[Dashboard] Mapped devices:', mappedDevices);
               setDevices(mappedDevices);
               devicesRef.current = mappedDevices;
             }
@@ -331,7 +344,7 @@ export default function DashboardScreen({ navigation }) {
   const devicesToRender = devices.length
     ? devices.map((device) => {
       const liveData = latestSensorByIdentifier[device.identifier || device.id] || {};
-      let currentBattery = Number.isFinite(liveData?.battery) ? liveData.battery : device.battery;
+      let currentBattery = Number.isFinite(liveData?.battPct) ? liveData.battPct : device.battery;
       if (currentBattery === 0) currentBattery = 90; // Fallback ke 90% (dummy) jika bernilai 0
 
       return {
